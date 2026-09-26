@@ -16,7 +16,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const app = await electron.launch({
     executablePath: packaged || require('electron'),
     args: [...(packaged ? [] : [ROOT]), '--demo', '--no-sandbox', '--disable-gpu-sandbox'],
-    env: { ...process.env, ENGRAM_DEMO: '1', ...(packaged ? { ENGRAM_HOME: require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'engram-e2e-')) } : {}) },
+    // Pretend ENGRAM runs from an external drive (demo/usb) to exercise the one-click setup.
+    env: { ...process.env, ENGRAM_DEMO: '1', ENGRAM_DRIVE_ROOT: path.join(ROOT, 'demo', 'usb'), ...(packaged ? { ENGRAM_HOME: require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'engram-e2e-')) } : {}) },
   });
   const errors = [];
   const win = await app.firstWindow();
@@ -29,7 +30,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(1150);
   await shot('00-boot');
   await win.waitForSelector('#boot.done', { state: 'attached', timeout: 15000 });
-  await wait(1800);
+  await wait(1200);
+
+  // First run from a drive: ENGRAM offers to keep Claude sessions on it.
+  await win.waitForSelector('.modal-back', { timeout: 5000 });
+  assert.match(await win.textContent('.modal h3'), /USE THIS DRIVE/);
+  await shot('14-drive-offer');
+  await win.click('.modal [data-ok]');
+  await wait(2500);
+  assert.match(await win.textContent('#toasts'), /SESSIONS ON DRIVE/);
+  const fs = require('fs');
+  const usbSessions = path.join(ROOT, 'demo', 'usb', 'claude-sessions');
+  assert.ok(fs.readdirSync(usbSessions).length > 0, 'sessions copied to the drive');
+  assert.ok(fs.lstatSync(path.join(ROOT, 'demo', 'home', '.claude', 'projects')).isSymbolicLink(), 'Claude folder now links to the drive');
+  await wait(600);
   const kpi = await win.textContent('.kpi.hero .value');
   assert.match(kpi, /^\$[\d,]+\.\d\d$/, 'total spend renders as money');
   assert.ok(await win.$$eval('#nx-bars .bar-row', (n) => n.length) >= 3, 'project bars render');
@@ -71,6 +85,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   await nav('bridge');
   await wait(800);
+  assert.match(await win.textContent('#br-drive'), /READY/);
   await shot('08-bridge');
   await win.click('#br-sync');
   await wait(2500);

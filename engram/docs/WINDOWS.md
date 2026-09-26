@@ -1,5 +1,57 @@
 # ENGRAM on Windows: setup guide
 
+## Quick start: the same Claude sessions on both laptops
+
+Use this when your projects live on an external drive and you use one Claude account per
+laptop.
+
+1. **Give the drive the same letter on both laptops**, for example `E:`. Open Disk
+   Management (right-click Start), right-click the drive, choose *Change Drive Letter and
+   Paths…*, and pick `E:`. Claude Code finds sessions by the project's full path, so
+   `E:\code\myapp` must be the same on both laptops.
+2. Unzip the **portable** ENGRAM onto the drive, so you have `E:\ENGRAM\ENGRAM.exe`.
+   See steps 2–4 below for downloading and Windows prompts.
+3. On laptop 1: **close Claude Code**, then run `E:\ENGRAM\ENGRAM.exe`. It asks *"Use this
+   drive for Claude sessions?"* Click **SHARE SESSIONS ON THIS DRIVE**.
+4. Plug the drive into laptop 2 and do the same.
+5. Done. On either laptop, run:
+   ```
+   cd E:\code\myapp
+   claude --continue      (or: claude --resume  to pick a session)
+   ```
+
+What the button does, on the laptop where you click it:
+
+- copies that laptop's existing Claude sessions to `E:\claude-sessions`, keeping the
+  originals as a backup (`.claude\projects.before-engram-<date>`)
+- makes Claude Code's `%USERPROFILE%\.claude\projects` folder point to
+  `E:\claude-sessions` (a Windows *junction*, no admin needed)
+- sets Claude Code to keep sessions for 10 years instead of 30 days
+- remembers the drive letter, and warns you if the drive shows up as a different letter
+
+Your **login stays on each laptop**: the work account on the work laptop, the personal
+one on the personal laptop. Only the conversations are shared. Project files and any
+`CLAUDE.md` are already on the drive, so Claude's project memory comes along too.
+
+To undo it on a laptop: **BRIDGE → SESSIONS ON THIS DRIVE → STOP SHARING ON THIS LAPTOP**.
+The laptop gets a normal folder back with copies of the sessions, and nothing on the
+drive is deleted.
+
+Good to know:
+
+- **Plug in the drive before starting Claude Code.** Without it, Claude can't save the
+  session.
+- **Resuming on the other account costs more on the first message.** Each account has
+  its own cache, so the first message reloads the conversation at full price.
+- **If the work laptop is Intune-managed, it may block USB drives**, and your company may
+  not allow work sessions on a personal drive.
+- **Encrypt the drive** (right-click it → *Turn on BitLocker*).
+
+ENGRAM itself is optional after setup. Claude Code keeps using the drive whether or not
+ENGRAM is open. ENGRAM adds cost tracking, replays and the notes vault on top.
+
+---
+
 ## 1. Pick a version
 
 | | **Portable (recommended)** | Installer |
@@ -127,8 +179,9 @@ setting only applies to this PowerShell window, so a normal `claude` still uses 
 | Find anything | **Ctrl+K** |
 | Refresh | **Ctrl+R**. ENGRAM also refreshes automatically when Claude writes new sessions. |
 
-ENGRAM only writes into your Claude folders when you press **SYNC NOW**, **SYNC MEMORY**,
-**INJECT**, or **RESUME ON**. Everything else is read-only.
+ENGRAM only writes into your Claude folders when you press **SHARE SESSIONS ON THIS
+DRIVE**, **SYNC NOW**, **SYNC MEMORY**, **INJECT**, or **RESUME ON**. Everything else is
+read-only.
 
 ## 7. Use ENGRAM on both laptops
 
@@ -138,8 +191,9 @@ install once and carry around, or keep in sync.
 
 ### Option A: thumb drive (install once, carry it)
 
-1. Extract the portable zip onto the drive, so you have `E:\ENGRAM\ENGRAM.exe`. The drive
-   letter doesn't matter.
+1. Extract the portable zip onto the drive, so you have `E:\ENGRAM\ENGRAM.exe`. If you
+   also share Claude sessions on the drive (Quick start above), give it the same letter on
+   both laptops.
 2. Plug the drive into either laptop and run `ENGRAM.exe` from the drive. The first time
    on each laptop, ENGRAM finds that laptop's Claude account by itself.
 3. Everything is stored on the drive in `ENGRAM\ENGRAM-data`. Each laptop you run it on

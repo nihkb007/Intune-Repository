@@ -8,6 +8,13 @@ define, and lets you switch between Claude accounts without losing context.
 
 ![Nexus](docs/screenshots/01-nexus.png)
 
+## Same Claude sessions on two laptops, one click
+
+Put ENGRAM on the external drive that holds your projects and run it there. It offers
+**SHARE SESSIONS ON THIS DRIVE**. Click it once on each laptop, and either laptop, with
+either Claude account, can `claude --continue` the same sessions. See the
+[quick start](docs/WINDOWS.md#quick-start-the-same-claude-sessions-on-both-laptops).
+
 ## What it does
 
 | Module | What you get |

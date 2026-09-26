@@ -35,6 +35,7 @@ export function applySnapshot(s) {
   state.settings = s.settings;
   state.capsules = s.capsules;
   state.sync = s.sync || null;
+  state.drive = s.drive || { available: false };
   document.body.dataset.effects = s.settings.effects || 'full';
   renderAccountSwitch();
   renderRailStat();
@@ -224,7 +225,22 @@ async function init() {
   const params = new URLSearchParams(location.search);
   go(params.get('view') || 'nexus');
   await bootSequence(snap);
+  offerDrive();
 }
+
+/** First run from an external drive on this laptop: offer the one-click setup. */
+function offerDrive() {
+  const d = state.drive || {};
+  if (!d.available || d.shared || d.offered) return;
+  modal('USE THIS DRIVE FOR CLAUDE SESSIONS?', `<p>ENGRAM is running from <b>${esc(d.root)}</b>. Save this laptop's Claude Code sessions on the drive too, so <b>either laptop and either account</b> can continue the same sessions?</p>
+    <ul style="color:var(--ink-2);line-height:1.7"><li>Copies this laptop's existing sessions to <span class="mono">${esc(d.target)}</span> (the originals are kept as a backup)</li><li>Points Claude Code at the drive. Your login stays on this laptop</li><li>Keeps sessions for 10 years instead of 30 days</li></ul>
+    <p class="muted" style="font-size:13px">Close Claude Code first. You can undo this under BRIDGE.</p>`, {
+    okLabel: 'SHARE SESSIONS ON THIS DRIVE',
+    onOk: async () => { const { shareOnDrive } = await import('./views.js'); await shareOnDrive(); },
+  });
+  api.drive.dismiss();
+}
+
 
 init().catch((e) => {
   document.getElementById('boot-log').textContent = 'BOOT FAILURE: ' + e.message;

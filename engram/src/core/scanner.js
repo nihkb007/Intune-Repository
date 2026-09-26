@@ -76,6 +76,14 @@ class Scanner {
     const seenMsg = new Set();
     // Sessions brought over from another laptop: their original messages stay credited
     // to the account that ran them there.
+    // Sessions shared on a drive: every laptop scans the same files, so each message is
+    // credited to the account of the laptop that first saw it (ENGRAM runs where Claude runs).
+    const sharedDrive = !!this.store.data.settings.sharedSessions;
+    const owners = sharedDrive ? (this.store.data.msgOwners = this.store.data.msgOwners || {}) : null;
+    const linkedAccounts = new Set(sharedDrive ? accounts.filter((a) => {
+      try { return fs.lstatSync(path.join(a.configDir, 'projects')).isSymbolicLink(); } catch { return false; }
+    }).map((a) => a.id) : []);
+    const activeLocal = accounts.some((x) => x.id === this.store.data.activeAccountId) ? this.store.data.activeAccountId : null;
     const imported = new Map(Object.entries(this.store.data.syncState?.imported || {})
       .filter(([, v]) => v.accountId).map(([sid, v]) => [sid, { keys: new Set(v.keys || []), accountId: v.accountId }]));
     const sessions = new Map();
@@ -154,7 +162,14 @@ class Scanner {
         rec.turns.assistant++;
         const c = costOf(u.usage, u.model, pricing);
         const imp = imported.get(id);
-        const acctId = bridgeLedger[id]?.attrib?.[u.key] || (imp && imp.keys.has(u.key) ? imp.accountId : accountId);
+        let acctId = bridgeLedger[id]?.attrib?.[u.key] || (imp && imp.keys.has(u.key) ? imp.accountId : accountId);
+        if (owners && !f.remoteMachine) {
+          // New message: from a folder already joined on the drive, credit the account in use
+          // on this laptop; from a still-separate folder, credit that folder's account.
+          if (!owners[u.key]) owners[u.key] = linkedAccounts.has(accountId) && activeLocal ? activeLocal : acctId;
+          acctId = owners[u.key];
+          if (!rec._owned) { rec.accountId = acctId; rec._owned = true; }
+        }
         rec.accountCost[acctId] = (rec.accountCost[acctId] || 0) + c.total;
         rec.cost += c.total;
         rec.saved += c.saved;
@@ -298,6 +313,7 @@ class Scanner {
       delete s.hours;
       delete s.dailyAcct;
       delete s._ctxTs;
+      delete s._owned;
     }
 
     // Projects only seen on other laptops: look for a local checkout of the same repo.

@@ -42,6 +42,13 @@ function panelHead(n, title, tools = '') {
 function insights() {
   const m = state.model;
   const out = [];
+  const d = state.drive || {};
+  if (d.available && d.letter && !d.letter.ok) {
+    out.push({ c: 'var(--yellow)', i: 'alert', t: `Drive is ${d.letter.actual} here, ${d.letter.expected} on your other laptop`, p: 'Give it the same letter on both laptops so Claude Code matches your project paths and sessions.', act: { label: 'HOW TO FIX', run: () => go('bridge') } });
+  }
+  if (d.available && !d.shared) {
+    out.push({ c: 'var(--green)', i: 'folder', t: 'Keep Claude sessions on this drive', p: 'One click and both laptops, on either account, continue the same Claude Code sessions.', act: { label: 'SHARE SESSIONS ON THIS DRIVE', run: () => shareOnDrive() } });
+  }
   if (m.totals.saved > 0) {
     out.push({ c: 'var(--green)', i: 'bolt', t: `Prompt caching saved ${money(m.totals.saved)}`, p: `${(m.totals.cacheEfficiency * 100).toFixed(0)}% of input-equivalent spend was served from cache. Keep sessions warm and avoid editing early context.` });
   }
@@ -604,7 +611,7 @@ function bridgeView(root, params) {
   let H = 220;
   if (remotes.length) {
     // This laptop's accounts on the left, other laptops' accounts on the right.
-    H = Math.max(220, 110 * Math.max(accts.length, remotes.length) + 20);
+    H = Math.max(240, 170 * Math.max(accts.length, remotes.length) + 20);
     const col = (list, x) => list.map((a, i) => ({ ...a, x, y: (H / (list.length + 1)) * (i + 1) }));
     nodes = [...col(accts, 150), ...col(remotes, W - 150)];
   } else {
@@ -614,8 +621,9 @@ function bridgeView(root, params) {
   root.innerHTML = `
     ${head('MULTI-ACCOUNT CONTEXT BRIDGE', 'BRIDGE', 'Switch Claude accounts without losing context. Sessions mirror across accounts so any of them can resume any conversation, and global directives sync into each account\'s memory.',
       `<button class="btn ghost" id="br-detect">${icon('search')}DETECT</button><button class="btn" id="br-add">${icon('plus')}LINK ACCOUNT</button>`)}
+    <div class="panel" id="br-drive" style="margin-bottom:18px;--pc:var(--green)"></div>
     <div class="panel" style="margin-bottom:18px">
-      <svg class="link-map" viewBox="0 0 ${W} ${H}">
+      <svg class="link-map" viewBox="0 0 ${W} ${H}" style="height:${H}px">
         <defs><radialGradient id="core-g"><stop offset="0" stop-color="#00f0ff" stop-opacity=".9"/><stop offset=".5" stop-color="#8b7bff" stop-opacity=".35"/><stop offset="1" stop-color="#ff2bd6" stop-opacity="0"/></radialGradient></defs>
         ${nodes.map((n) => `<path d="M${n.x},${n.y} C${(n.x + W / 2) / 2},${n.y} ${(n.x + W / 2) / 2},${H / 2} ${W / 2},${H / 2}" stroke="${n.color}" stroke-width="1.5" fill="none" opacity=".3"/><path class="flow" d="M${n.x},${n.y} C${(n.x + W / 2) / 2},${n.y} ${(n.x + W / 2) / 2},${H / 2} ${W / 2},${H / 2}" stroke="${n.color}" stroke-width="2" fill="none" style="filter:drop-shadow(0 0 4px ${n.color})"/>`).join('')}
         <circle cx="${W / 2}" cy="${H / 2}" r="70" fill="url(#core-g)"><animate attributeName="r" values="62;74;62" dur="3s" repeatCount="indefinite"/></circle>
@@ -642,6 +650,7 @@ function bridgeView(root, params) {
     </div>
     <div class="panel" id="br-link" style="margin-top:18px;--pc:var(--yellow)"></div>`;
   drawLink($(root, '#br-link'));
+  drawDrive($(root, '#br-drive'));
 
   call(api.launch.command, {}).then((c) => { $(root, '#br-cmd').textContent = c; }).catch(() => {});
   $(root, '#br-cmd-copy').onclick = () => copyLaunch();
@@ -676,6 +685,49 @@ function bridgeView(root, params) {
     toast(`${r.filter((x) => x.changed).length} of ${r.length} account memories updated`, 'MEMORY SYNCED', 'var(--green)');
   };
   if (params.autosync) sync(); else $(root, '#br-plan').click();
+}
+
+// ---------- SESSIONS ON THIS DRIVE ----------
+export async function shareOnDrive() {
+  const r = await call(api.drive.share);
+  applySnapshot(r.snapshot);
+  const moved = r.results.reduce((n, x) => n + (x.copied || 0), 0);
+  toast(`${r.results.map((x) => x.name).join(', ')} now save${r.results.length === 1 ? 's' : ''} sessions to ${state.drive.target}. ${moved} existing session file(s) copied; originals kept as a backup.`, 'SESSIONS ON DRIVE', 'var(--green)');
+  if (!r.letter.ok) toast(`This drive is ${r.letter.actual} here but was set up as ${r.letter.expected}. Change it to ${r.letter.expected} so project paths match.`, 'DRIVE LETTER', 'var(--yellow)');
+  rerender();
+}
+
+function drawDrive(box) {
+  const d = state.drive || {};
+  if (!d.available) {
+    box.innerHTML = `${panelHead('00', 'SESSIONS ON YOUR DRIVE')}
+      <p style="margin-top:0">Keep your projects <b>and</b> your Claude Code sessions on your external drive. Then either laptop and either account can continue the same sessions.</p>
+      <p class="muted" style="font-size:13px">Run ENGRAM from the drive and this is detected automatically, or choose the drive here.</p>
+      <button class="btn" id="dv-choose">${icon('folder')}CHOOSE MY DRIVE</button>`;
+    $(box, '#dv-choose').onclick = async () => { applySnapshot(await call(api.drive.choose)); rerender(); };
+    return;
+  }
+  const letterBad = d.letter && !d.letter.ok;
+  const rows = d.accounts.map((a) => {
+    const label = { shared: '<span class="tag g">ON DRIVE</span>', local: '<span class="tag">ON THIS LAPTOP</span>', unplugged: '<span class="tag r">DRIVE UNPLUGGED</span>', 'other-link': '<span class="tag y">LINKED ELSEWHERE</span>', none: '<span class="tag">NO SESSIONS YET</span>' }[a.state] || a.state;
+    return `<div class="set-row"><div><b>${esc(a.name)}</b><small class="mono" style="display:block">${esc(a.projects)}</small></div>${label}</div>`;
+  }).join('');
+  box.innerHTML = `${panelHead('00', 'SESSIONS ON THIS DRIVE', d.shared ? '<span class="tag g">READY</span>' : '')}
+    ${letterBad ? `<div class="insight" style="--c:var(--yellow);margin-bottom:12px">${icon('alert')}<div><b>Drive letter is ${esc(d.letter.actual)} here, but ${esc(d.letter.expected)} on your other laptop</b><p>Claude Code finds sessions by the project's full path, so the drive needs the same letter everywhere. In Disk Management, right-click the drive → <i>Change Drive Letter and Paths…</i> → choose ${esc(d.letter.expected)}.</p><div class="act"><button class="btn ghost small" id="dv-disk">OPEN DISK MANAGEMENT</button></div></div></div>` : ''}
+    <p style="margin-top:0">${d.shared
+      ? `Claude Code on this laptop saves its conversations to <span class="mono">${esc(d.target)}</span>. Open a project on the drive and run <span class="mono">claude --continue</span> or <span class="mono">claude --resume</span> to pick up where either laptop left off.`
+      : `One click makes Claude Code on this laptop save its conversations to <span class="mono">${esc(d.target)}</span>, next to your projects. It copies this laptop's existing sessions onto the drive (the originals are kept as a backup), links Claude Code to the drive, and tells Claude Code to keep sessions for 10 years instead of 30 days. Do it once on each laptop.`}</p>
+    ${rows}
+    <div class="row-flex" style="margin-top:14px;gap:10px;flex-wrap:wrap">
+      ${d.shared ? '<button class="btn danger small" id="dv-unshare">STOP SHARING ON THIS LAPTOP</button>' : `<button class="btn" id="dv-share" style="background:var(--green);box-shadow:0 0 16px var(--green)">${icon('check')}SHARE SESSIONS ON THIS DRIVE</button>`}
+      <span class="muted" style="font-size:12px">Close Claude Code first. Keep the drive plugged in while using Claude.</span>
+    </div>`;
+  const share = $(box, '#dv-share');
+  if (share) share.onclick = async () => { share.disabled = true; try { await shareOnDrive(); } finally { share.disabled = false; } };
+  const un = $(box, '#dv-unshare');
+  if (un) un.onclick = () => modal('STOP SHARING ON THIS LAPTOP', '<p>Claude Code on this laptop goes back to a normal local folder, with copies of the sessions currently on the drive. Nothing on the drive is deleted.</p>', { okLabel: 'STOP SHARING', onOk: async () => { const r = await call(api.drive.unshare); applySnapshot(r.snapshot); rerender(); } });
+  const disk = $(box, '#dv-disk');
+  if (disk) disk.onclick = () => call(api.drive.diskManagement);
 }
 
 // ---------- LAPTOP LINK ----------

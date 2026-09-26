@@ -7,6 +7,8 @@ const { Scanner } = require('../core/scanner');
 const { fuse } = require('../core/fusion');
 const bridge = require('../core/bridge');
 const sync = require('../core/sync');
+const driveCore = require('../core/drive');
+const os = require('os');
 
 const DEMO = process.argv.includes('--demo') || process.env.ENGRAM_DEMO === '1';
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -59,6 +61,34 @@ function applyConfigFile() {
 }
 
 const localAccounts = () => sync.localAccounts(store);
+
+// ---- Claude sessions on the external drive -------------------------------------------------
+/** The drive ENGRAM runs from (portable copy on an external drive), or one the user picked. */
+function driveRoot() {
+  if (process.env.ENGRAM_DRIVE_ROOT) return process.env.ENGRAM_DRIVE_ROOT;
+  if (store.data.settings.sessionsDriveRoot) return store.data.settings.sessionsDriveRoot;
+  if (PORTABLE) {
+    const root = path.parse(process.execPath).root;
+    if (root.toLowerCase() !== path.parse(os.homedir()).root.toLowerCase()) return root;
+  }
+  return null;
+}
+
+function driveStatus() {
+  const root = driveRoot();
+  if (!root) return { available: false };
+  const target = driveCore.sessionsTarget(root);
+  const accounts = localAccounts().map((a) => ({ id: a.id, name: a.name, ...driveCore.accountStatus(a, target) }));
+  return {
+    available: true,
+    root,
+    target,
+    letter: driveCore.letterCheck(root, target),
+    accounts,
+    shared: accounts.length > 0 && accounts.every((a) => a.state === 'shared'),
+    offered: !!store.data.machines?.[sync.identity(store).id]?.driveOffered,
+  };
+}
 
 // ---- shared-folder lock (portable copy on a drive or NAS share) ---------------------------
 // One vault file must not be written by two laptops at once. While ENGRAM runs from a
@@ -135,7 +165,7 @@ function syncStatus() {
 
 function snapshot(model) {
   const d = store.data;
-  return { model, accounts: localAccounts(), activeAccountId: d.activeAccountId, settings: d.settings, capsules: d.capsules, notesCount: d.notes.length, sync: syncStatus() };
+  return { model, drive: driveStatus(), accounts: localAccounts(), activeAccountId: d.activeAccountId, settings: d.settings, capsules: d.capsules, notesCount: d.notes.length, sync: syncStatus() };
 }
 
 function watchAccounts() {
@@ -270,6 +300,52 @@ function registerIpc() {
   handle('settings:update', (patch) => store.updateSettings(patch));
 
   handle('sync:status', () => syncStatus());
+
+  handle('drive:status', () => driveStatus());
+  handle('drive:share', () => {
+    const root = driveRoot();
+    if (!root) throw new Error('ENGRAM is not running from an external drive. Choose the drive first.');
+    const target = driveCore.sessionsTarget(root);
+    // Record who ran every existing message while each account still has its own folder;
+    // once the folders are joined on the drive that can no longer be told apart.
+    store.data.settings.sharedSessions = true;
+    cycle();
+    const letter = driveCore.letterCheck(root, target, { remember: true, laptop: sync.identity(store).name });
+    const results = localAccounts().map((a) => {
+      const r = driveCore.shareAccount(a, target);
+      driveCore.keepSessionsLonger(a.configDir);
+      return { ...r, name: a.name };
+    });
+    store.data.settings.sharedSessions = true;
+    store.save(true);
+    watchAccounts();
+    return { results, letter, snapshot: snapshot(cycle()) };
+  });
+  handle('drive:unshare', () => {
+    const root = driveRoot();
+    if (!root) throw new Error('No drive selected.');
+    const results = localAccounts().map((a) => driveCore.unshareAccount(a, driveCore.sessionsTarget(root)));
+    watchAccounts();
+    return { results, snapshot: snapshot(cycle()) };
+  });
+  handle('drive:choose', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Choose your external drive (its top folder)', properties: ['openDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return snapshot(scanner.model || cycle());
+    store.data.settings.sessionsDriveRoot = r.filePaths[0];
+    store.save(true);
+    return snapshot(scanner.model || cycle());
+  });
+  handle('drive:dismiss', () => {
+    const me = sync.identity(store);
+    store.data.machines[me.id] = { ...store.data.machines[me.id], driveOffered: true };
+    store.save(true);
+    return true;
+  });
+  handle('drive:diskManagement', () => {
+    if (process.platform !== 'win32') throw new Error('Disk Management is a Windows tool.');
+    require('child_process').spawn('mmc.exe', ['diskmgmt.msc'], { detached: true, stdio: 'ignore' }).unref();
+    return true;
+  });
   handle('sync:update', (patch) => {
     const cfg = store.data.settings.sync;
     if ('folder' in patch) { cfg.folder = patch.folder || null; cfg.folderClearedByUser = !patch.folder; }
