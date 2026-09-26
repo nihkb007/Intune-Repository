@@ -169,7 +169,8 @@ function launchTerminal(account, opts = {}) {
   const platform = process.platform;
   const cmd = launchCommand(account, { ...opts, platform });
   if (platform === 'win32') {
-    spawn('cmd.exe', ['/c', 'start', 'powershell.exe', '-NoExit', '-Command', cmd], { detached: true, stdio: 'ignore' }).unref();
+    // detached gives a console app its own window on Windows; no cmd.exe quoting involved.
+    spawn('powershell.exe', ['-NoExit', '-NoLogo', '-Command', cmd], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
   } else if (platform === 'darwin') {
     const script = `tell application "Terminal" to do script ${JSON.stringify(cmd)}`;
     spawn('osascript', ['-e', script, '-e', 'tell application "Terminal" to activate'], { detached: true, stdio: 'ignore' }).unref();

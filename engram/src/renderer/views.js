@@ -682,7 +682,7 @@ async function settings(root) {
         <div class="set-row"><div><b>Monthly budget (USD)</b><small>Drives the budget gauge and overspend alerts.</small></div><input class="input" id="st-budget" type="number" min="0" style="width:120px" value="${s.monthlyBudget}" /></div>
         <div class="set-row"><div><b>Archive recordings</b><small>Copy every transcript into the vault. Claude Code deletes old sessions; ENGRAM keeps them.</small></div><input type="checkbox" class="switch" id="st-arch" ${s.autoArchive ? 'checked' : ''} /></div>
         <div class="set-row"><div><b>Visual effects</b><small>Animated grid, glitch and scanlines. Reduce on low-power machines.</small></div><select class="select" id="st-fx" style="width:150px">${['full', 'reduced', 'off'].map((x) => `<option ${s.effects === x ? 'selected' : ''} value="${x}">${x.toUpperCase()}</option>`).join('')}</select></div>
-        <div class="set-row"><div><b>Vault location</b><small class="mono">${esc(init.dataDir)}</small></div><button class="btn ghost small" id="st-open">${icon('folder')}OPEN</button></div>
+        <div class="set-row"><div><b>Vault location</b>${init.portable ? ' <span class="tag g">PORTABLE</span>' : ''}<small class="mono" style="display:block">${esc(init.dataDir)}</small></div><button class="btn ghost small" id="st-open">${icon('folder')}OPEN</button></div>
       </div>
       <div class="panel" style="--pc:var(--yellow)">${panelHead('02', 'PRICING MATRIX · USD / 1M TOKENS')}
         <table class="table price-table"><thead><tr><th>MODEL</th><th class="num">INPUT</th><th class="num">OUTPUT</th><th class="num">CACHE READ</th></tr></thead><tbody>

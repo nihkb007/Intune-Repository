@@ -10,7 +10,12 @@ const bridge = require('../core/bridge');
 const DEMO = process.argv.includes('--demo') || process.env.ENGRAM_DEMO === '1';
 const APP_ROOT = path.join(__dirname, '..', '..');
 
+// Portable mode: an "ENGRAM-data" folder next to ENGRAM.exe holds everything the app
+// stores (vault, archived recordings, settings, browser cache), so nothing goes to %APPDATA%.
+const portableDir = app.isPackaged ? path.join(path.dirname(process.execPath), 'ENGRAM-data') : null;
+const PORTABLE = !!portableDir && fs.existsSync(portableDir);
 if (process.env.ENGRAM_HOME) app.setPath('userData', process.env.ENGRAM_HOME);
+else if (PORTABLE) app.setPath('userData', portableDir);
 const demoRoot = app.isPackaged ? path.join(app.getPath('userData'), 'demo') : path.join(APP_ROOT, 'demo');
 const dataDir = DEMO ? path.join(demoRoot, 'data') : path.join(app.getPath('userData'), 'vault');
 
@@ -101,7 +106,7 @@ function globalDirectivesMarkdown() {
 }
 
 function registerIpc() {
-  handle('app:init', () => ({ ...snapshot(scanner.model || scanner.scan()), demo: DEMO, platform: process.platform, version: app.getVersion(), dataDir }));
+  handle('app:init', () => ({ ...snapshot(scanner.model || scanner.scan()), demo: DEMO, portable: PORTABLE, platform: process.platform, version: app.getVersion(), dataDir }));
   handle('scan:run', () => snapshot(scanner.scan()));
   handle('session:detail', (id) => scanner.detail(id));
   handle('session:replay', (id) => scanner.replay(id));

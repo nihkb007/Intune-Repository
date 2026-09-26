@@ -51,13 +51,16 @@ the dollar amount saved each time you load the capsule instead of the old contex
 
 ## Install
 
-Download the installer for your OS from the **ENGRAM build** GitHub Action artifacts,
-or build it yourself:
+**Windows users: follow [docs/WINDOWS.md](docs/WINDOWS.md)** (portable zip or installer,
+SmartScreen/Defender notes, linking two Claude accounts).
+
+Downloads are on the repository's **Releases** page (tag `engram-latest`). Or build it
+yourself:
 
 ```bash
 cd engram
 npm install
-npm run dist:win     # → dist/ENGRAM-Setup-1.0.0.exe   (NSIS installer, Windows x64)
+npm run dist:win     # → dist/ENGRAM-Setup-1.0.0.exe + dist/ENGRAM-Portable-1.0.0-win-x64.zip
 npm run dist:linux   # → dist/ENGRAM-1.0.0-x86_64.AppImage + .deb
 npm run dist:mac     # → dist/ENGRAM-1.0.0.dmg          (run on macOS)
 ```

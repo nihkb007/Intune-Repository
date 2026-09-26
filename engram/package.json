@@ -13,9 +13,10 @@
     "test:e2e": "node scripts/make-demo-data.js && node test/e2e/screenshots.js",
     "icons": "electron scripts/make-icons.js",
     "dist": "electron-builder",
-    "dist:win": "electron-builder --win nsis",
+    "dist:win": "electron-builder --win nsis dir && node scripts/make-portable.js",
     "dist:linux": "electron-builder --linux AppImage deb",
-    "dist:mac": "electron-builder --mac dmg"
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win:portable": "electron-builder --win dir && node scripts/make-portable.js"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.1.0",
@@ -25,6 +26,7 @@
     "marked": "^14.1.0"
   },
   "devDependencies": {
+    "7zip-bin": "^5.2.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "playwright-core": "^1.48.0"
