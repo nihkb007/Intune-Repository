@@ -40,7 +40,7 @@ function shell(inner) {
     <div class="cx-logo glitch" data-text="ENGRAM">ENGRAM</div>
     <div class="cx-sub">CLAUDE COMMAND CENTER · PORTAL</div>
     ${inner}
-    <p class="cx-foot">Your Claude sessions stay on your drive and are read only by this browser tab. The portal stores your presets. · <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
+    <p class="cx-foot">Your Claude sessions stay on your drive and are read only by this browser tab. The portal stores your account and presets. · <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
   </div>`;
   document.body.appendChild(box);
   return box;
@@ -63,6 +63,69 @@ function renderLogin() {
     $('#lg-go', box).disabled = false;
     if (r.ok) return main();
     $('#lg-err', box).textContent = (await r.json().catch(() => ({}))).error || 'Sign-in failed.';
+  };
+}
+
+// First run on a fresh site: make the account here. Links open the right Vercel page (Vercel
+// asks which team and project when needed).
+const vercel = (to, title) => `https://vercel.com/d?to=${encodeURIComponent(to)}&title=${encodeURIComponent(title)}`;
+const V_STORAGE = vercel('/[team]/[project]/stores', 'Open Storage');
+const V_DEPLOYS = vercel('/[team]/[project]/deployments', 'Open Deployments');
+const V_ENV = vercel('/[team]/[project]/settings/environment-variables', 'Open Environment Variables');
+
+function renderSetup(me) {
+  const s = me.setup;
+  const done = (ok) => `<span class="cx-state ${ok ? 'ok' : ''}">${ok ? 'DONE' : 'TO DO'}</span>`;
+  const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+  const box = shell(`
+    <p class="cx-lead">Welcome. This site is yours but has no account yet. Three steps, about five minutes, only once.</p>
+    ${me.storeError ? `<div class="cx-warn">Storage is connected but not answering: ${esc(me.storeError)}</div>` : ''}
+    <div class="cx-step"><div class="cx-n">1</div><div>
+      <h3>CONNECT STORAGE ${done(s.storage)}</h3>
+      <p>Your account and presets are saved in a small free database attached to the site.</p>
+      <ol class="cx-list">
+        <li>${link(V_STORAGE, 'Open Storage in Vercel')}. If it asks, pick your team and the <b>engram</b> project.</li>
+        <li>Click <b>Create Database</b>, choose <b>Upstash for Redis</b>, pick the <b>Free</b> plan, and click <b>Create</b>.</li>
+        <li>When it asks where to connect it, keep the <b>engram</b> project and all environments ticked, then click <b>Connect</b>.</li>
+        <li>${link(V_DEPLOYS, 'Open Deployments')}, click <b>⋯</b> on the top one, then <b>Redeploy</b>. Wait until it says Ready (about a minute).</li>
+      </ol>
+      <button class="btn ghost small" id="su-check">CHECK AGAIN</button>
+    </div></div>
+    <div class="cx-step"><div class="cx-n">2</div><div>
+      <h3>COPY YOUR SETUP CODE ${done(s.code)}</h3>
+      <p>A one-time code that proves the site is yours, so nobody else who finds the address can take it.</p>
+      <ol class="cx-list">
+        <li>${link(V_ENV, 'Open Environment Variables in Vercel')}.</li>
+        ${s.code
+          ? '<li>Find <b class="mono">ENGRAM_SETUP_CODE</b>, click the <b>eye</b> icon to show it, and copy it.</li><li>Can’t reveal it? Edit it, type any code you like (8+ letters or numbers), save, and redeploy as in step 1.</li>'
+          : '<li>Click <b>Add New</b>. Key: <b class="mono">ENGRAM_SETUP_CODE</b>. Value: any code you make up (8+ letters or numbers). Save.</li><li>Redeploy as in step 1, then click <b>CHECK AGAIN</b>.</li>'}
+      </ol>
+    </div></div>
+    <form class="cx-step" id="su-form" autocomplete="on"><div class="cx-n">3</div><div>
+      <h3>CREATE YOUR ACCOUNT</h3>
+      <p>Use it to sign in on both laptops.</p>
+      <div class="cx-form">
+        <label class="cx-field"><span>USER NAME</span><input id="su-user" name="username" autocomplete="username" required minlength="2" maxlength="32" /></label>
+        <label class="cx-field"><span>PASSWORD (12+ CHARACTERS)</span><input id="su-pass" name="password" type="password" autocomplete="new-password" required minlength="12" /></label>
+        <label class="cx-field"><span>PASSWORD AGAIN</span><input id="su-pass2" type="password" autocomplete="new-password" required minlength="12" /></label>
+        <label class="cx-field"><span>SETUP CODE (FROM STEP 2)</span><input id="su-code" autocomplete="off" required /></label>
+      </div>
+      <button class="btn" type="submit" id="su-go" ${s.storage && s.code ? '' : 'disabled'}>CREATE ACCOUNT</button>
+      ${s.storage && s.code ? '' : '<p class="muted" style="margin-top:8px">Finish steps 1 and 2 first.</p>'}
+      <p class="cx-err" id="su-err" style="text-align:left"></p>
+    </div></form>
+    <p style="text-align:center"><button class="btn ghost small" id="su-skip">USE WITHOUT AN ACCOUNT FOR NOW</button><br><small class="muted">Presets are then saved only in this browser.</small></p>`);
+  $('#su-check', box).onclick = () => main();
+  $('#su-skip', box).onclick = () => renderPresets({ me: { ...me, setup: null }, presets: new Presets('local') });
+  $('#su-form', box).onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('#su-err', box);
+    if ($('#su-pass', box).value !== $('#su-pass2', box).value) { err.textContent = 'The two passwords don’t match.'; return; }
+    $('#su-go', box).disabled = true;
+    const r = await post('api/setup', { username: $('#su-user', box).value, password: $('#su-pass', box).value, code: $('#su-code', box).value });
+    $('#su-go', box).disabled = false;
+    if (r.ok) return main();
+    err.textContent = (await r.json().catch(() => ({}))).error || 'Could not create the account.';
   };
 }
 
@@ -210,6 +273,7 @@ async function main() {
   document.body.classList.add('connecting');
   const me = await whoAmI();
   if (me?.auth && !me.user) return renderLogin();
+  if (me?.setup) return renderSetup(me);
   const presets = new Presets(me?.auth && me.user && me.store && me.store !== 'none' ? 'server' : 'local');
   return renderPresets({ me, presets });
 }

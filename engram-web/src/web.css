@@ -56,3 +56,10 @@ body.connecting #titlebar, body.connecting #rail, body.connecting #view, body.co
 .cx-colors { display: flex; gap: 10px; }
 .cx-colors button { width: 28px; height: 28px; border: 0; background: var(--c); cursor: pointer; }
 .cx-colors button.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--c); }
+.cx-list { margin: 0 0 12px 18px; padding: 0; color: var(--ink-2); line-height: 1.75; }
+.cx-list a { color: var(--cyan); }
+.cx-state { margin-left: 10px; padding: 2px 8px; font: 700 10px var(--f-display); letter-spacing: .2em; color: var(--yellow); border: 1px solid currentColor; vertical-align: middle; }
+.cx-state.ok { color: var(--green); }
+.cx-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+@media (max-width: 640px) { .cx-form { grid-template-columns: minmax(0, 1fr); } }
+form.cx-step { margin-top: 0; }

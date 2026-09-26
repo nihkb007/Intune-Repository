@@ -78,4 +78,20 @@ for (const [key, value] of Object.entries({ ENGRAM_USERS, ENGRAM_SESSION_SECRET 
     console.log(`! could not set ${key} (${err.message.replace(value, '***')}). Add it in Vercel → Settings → Environment Variables.`);
   }
 }
+// First-run setup code: the site asks for it before it lets anyone create the account. Made
+// once, never printed (this repository's logs are public); read it in Vercel.
+try {
+  const { envs = [] } = await api('GET', `/v9/projects/${encodeURIComponent(project)}/env`);
+  if (envs.some((e) => e.key === 'ENGRAM_SETUP_CODE')) console.log('✓ ENGRAM_SETUP_CODE already set');
+  else {
+    const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const code = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => abc[b % 32]).join('').match(/.{4}/g).join('-');
+    await api('POST', `/v10/projects/${encodeURIComponent(project)}/env`, { key: 'ENGRAM_SETUP_CODE', value: code, type: 'encrypted', target: ['production', 'preview'] });
+    console.log('✓ ENGRAM_SETUP_CODE created (see Vercel → Settings → Environment Variables)');
+  }
+} catch (err) {
+  problems++;
+  console.log(`! could not check ENGRAM_SETUP_CODE (${err.message.split(': ')[0]}). The site explains how to add it by hand.`);
+}
+
 if (problems) console.log(`${problems} step(s) need a manual touch; deployment continues.`);

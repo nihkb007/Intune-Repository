@@ -1,7 +1,7 @@
 // Local server for dist/ plus the api/ functions, the same way Vercel serves them.
 // The File System Access API needs http://localhost or https.
 //   npm run serve                          (no login: presets stay in the browser)
-//   ENGRAM_USERS=... ENGRAM_SESSION_SECRET=... ENGRAM_STORE=memory npm run serve
+//   ENGRAM_STORE=memory ENGRAM_SETUP_CODE=TEST-CODE-1234 npm run serve   (first-run account page)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';

@@ -1,7 +1,7 @@
 'use strict';
-// Portal login: users from ENGRAM_USERS ("name:pbkdf2$iterations$salt$hash", comma separated),
-// sessions as an HMAC-signed cookie using ENGRAM_SESSION_SECRET. Web Crypto only, so the same
-// code runs in Vercel functions, Node tests and the local dev server.
+// Portal login primitives: PBKDF2 password hashes and sessions as an HMAC-signed cookie.
+// Which users exist and which secret signs sessions is decided in accounts.js. Web Crypto
+// only, so the same code runs in Vercel functions, Node tests and the local dev server.
 
 const subtle = globalThis.crypto.subtle;
 const enc = new TextEncoder();
@@ -45,11 +45,9 @@ function parseUsers(env = process.env) {
   return users;
 }
 
-/** Login is on when both variables are set; otherwise the portal runs without it. */
-function authConfig(env = process.env) {
-  const users = parseUsers(env);
-  const secret = env.ENGRAM_SESSION_SECRET || '';
-  return { enabled: users.size > 0 && secret.length >= 32, users, secret, misconfigured: users.size > 0 && secret.length < 32 };
+/** Constant-time comparison of two strings (setup codes). */
+function sameText(a, b) {
+  return equal(enc.encode(String(a)), enc.encode(String(b)));
 }
 
 async function hmac(secret, data) {
@@ -91,4 +89,4 @@ function sessionCookie(token, { secure = true, clear = false } = {}) {
   ].filter(Boolean).join('; ');
 }
 
-module.exports = { COOKIE, hashPassword, verifyPassword, parseUsers, authConfig, signSession, readSession, getCookie, sessionCookie };
+module.exports = { COOKIE, hashPassword, verifyPassword, parseUsers, sameText, signSession, readSession, getCookie, sessionCookie };

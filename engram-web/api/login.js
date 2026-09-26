@@ -1,7 +1,8 @@
 'use strict';
 const { json, isSecure, sameOriginWrite, readBody } = require('../lib/http');
-const { authConfig, verifyPassword, signSession, sessionCookie } = require('../lib/auth');
+const { verifyPassword, signSession, sessionCookie } = require('../lib/auth');
 const { createStore } = require('../lib/store');
+const { loadAuth } = require('../lib/accounts');
 
 const WINDOW = 15 * 60;
 const MAX_TRIES = 8;
@@ -11,7 +12,7 @@ const DUMMY = 'pbkdf2$310000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAA
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return json(res, 405, { error: 'POST only' });
   if (!sameOriginWrite(req)) return json(res, 403, { error: 'Bad request origin' });
-  const cfg = authConfig();
+  const cfg = await loadAuth();
   if (!cfg.enabled) return json(res, 400, { error: 'Login is not set up on this deployment.' });
   let body;
   try { body = await readBody(req); } catch { return json(res, 400, { error: 'Invalid request' }); }

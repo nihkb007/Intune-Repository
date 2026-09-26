@@ -8,13 +8,13 @@ The ENGRAM command center as a website you sign in to:
 Your Claude sessions stay on your external drive and are read only by the browser tab. The
 server stores only your presets.
 
-| Sign in | Presets | Resume |
+| First visit | Presets | Resume |
 | --- | --- | --- |
-| ![Login](docs/web-01-login.png) | ![Presets](docs/web-03-presets.png) | ![Resume](docs/web-04-resume.png) |
+| ![First visit](docs/web-00-first-run.png) | ![Presets](docs/web-03-presets.png) | ![Resume](docs/web-04-resume.png) |
 
 ## Everyday use
 
-1. Open the portal and sign in.
+1. Open the portal and sign in (the first time: make your account, below).
 2. Pick a preset (e.g. **WORK LAPTOP**). The first time on each laptop, point it to
    `E:\claude-sessions` once. After that it remembers.
 3. You land where the preset says. With **Latest session (resume)**, click **COPY RESUME
@@ -25,41 +25,45 @@ paste it into PowerShell. It moves that laptop's sessions to the drive and links
 Code to them (a junction, no admin needed). Running it again is harmless. There's an undo
 command under SETUP.
 
+## First visit: make your account on the site
+
+A new deployment opens on a setup page with three steps (it links to the right Vercel pages):
+
+1. **Connect storage:** Vercel → Storage → Create Database → *Upstash for Redis* (free) →
+   connect it to the project → redeploy. Your account and presets live there.
+2. **Setup code:** copy `ENGRAM_SETUP_CODE` from Vercel → Settings → Environment Variables.
+   The deploy job creates it (and never prints it: this repository's logs are public). It
+   proves you own the site, so nobody who finds the address first can claim it.
+3. **Create your account:** user name, password (12+ characters), setup code.
+
+After that the site asks everyone to sign in. There is exactly one account; the setup page
+doesn't come back.
+
 ## Deploy to Vercel
 
 The `ENGRAM build` GitHub workflow tests everything, then deploys the portal to Vercel on
-every push.
+every push. It needs one repository secret (*Settings → Secrets and variables → Actions*):
 
-1. **Create the project** in Vercel (import this repo, or create an empty project).
-2. **Create the login** on any computer with Node:
-   ```bash
-   cd engram-web && npm ci && npm run make-user -- nihko
-   ```
-   It asks for a password (12+ characters) and prints `ENGRAM_USERS=…` (a salted hash, not
-   the password) and a random `ENGRAM_SESSION_SECRET=…`.
-3. **Add GitHub repository secrets** (*Settings → Secrets and variables → Actions*):
+| Secret | Where to find it |
+| --- | --- |
+| `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+| `VERCEL_PROJECT_ID` | optional: the workflow already names this repo's project (`prj_1oEZ…`) |
+| `VERCEL_ORG_ID` | optional: looked up from the project |
 
-   | Secret | Where to find it |
-   | --- | --- |
-   | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
-   | `VERCEL_PROJECT_ID` | optional: the workflow already names this repo's project (`prj_1oEZ…`) |
-   | `VERCEL_ORG_ID` | optional: looked up from the project |
-   | `ENGRAM_USERS`, `ENGRAM_SESSION_SECRET` | output of step 2 (optional here: you can also add them directly in Vercel) |
+The deploy job sets the project's Root Directory to `engram-web` (with files outside it
+included), creates `ENGRAM_SETUP_CODE` if missing, and lets Vercel build and deploy. The
+address appears in the run summary.
 
-4. **Presets across laptops:** in Vercel → *Storage*, create an **Upstash Redis** database
-   and connect it to the project. It adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
-   Without it, sign-in still works but presets stay in each browser.
-5. Push, or re-run the workflow. The deploy job first sets the project's Root Directory to
-   `engram-web` (with files outside it included) and the login variables through the
-   Vercel API, then builds and deploys. The deployment URL appears in the run summary.
+Advanced: instead of the setup page you can define logins in `ENGRAM_USERS` and
+`ENGRAM_SESSION_SECRET` (`npm run make-user -- <name>` prints both); they take precedence.
 
 Security notes:
 - Passwords are stored only as PBKDF2 hashes. Sessions are HMAC-signed, HttpOnly, Secure
-  cookies (30 days).
+  cookies (30 days); the signing secret is generated when the account is made.
 - Writes require a same-origin header.
-- After 8 failed sign-ins, an address is locked out for 15 minutes.
-- Without `ENGRAM_USERS` and `ENGRAM_SESSION_SECRET` the portal runs without login, with
-  presets kept per browser. That's the same as the static build.
+- After 8 failed sign-ins or setup-code attempts, an address is locked out for 15 minutes.
+- Without an account (or on static hosting) the portal runs open, with presets kept per
+  browser.
 
 ## How it works
 
@@ -70,7 +74,7 @@ Electron-specific is swapped out:
 - `src/engine.js` reads the chosen folder through the File System Access API into an
   in-memory file system (`src/shims/fs.js`), so the engine code runs as-is.
 - `src/api.js` provides the same `window.engram` interface the desktop screens call.
-- `api/*.js` + `lib/` are the portal server: `me`, `login`, `logout`, `presets` (Vercel Node
+- `api/*.js` + `lib/` are the portal server: `me`, `setup`, `login`, `logout`, `presets` (Vercel Node
   functions, no framework). `serve.mjs` runs them locally the same way.
 - `src/setup-script.js` generates the PowerShell setup/undo commands. CI runs them on a
   real Windows machine in Windows PowerShell 5.1 and PowerShell 7.
@@ -80,7 +84,7 @@ Electron-specific is swapped out:
 ```bash
 npm ci
 npm run build      # -> dist/ (static: index.html, engram-web.js, engram-web.css, fonts, demo-pack.json)
-npm run serve      # http://localhost:5173  (add ENGRAM_USERS, ENGRAM_SESSION_SECRET, ENGRAM_STORE=memory to try the login)
+npm run serve      # http://localhost:5173  (ENGRAM_STORE=memory ENGRAM_SETUP_CODE=TEST-CODE-1234 to try the account setup)
 npm test           # unit tests (+ real PowerShell tests on Windows)
 npm run test:e2e   # builds, then drives Chromium: sign in, presets, resume, a second laptop, sign out, demo
 ```

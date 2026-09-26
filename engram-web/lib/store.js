@@ -39,6 +39,12 @@ function createStore(env = process.env) {
       if (cfg.kind === 'memory') { memory.set(key, JSON.stringify(value)); return 'OK'; }
       throw new Error('No server storage configured');
     },
+    /** Set only if the key is new; true when this call set it. */
+    async setnx(key, value) {
+      if (cfg.kind === 'redis') return (await redis(cfg, ['SET', key, JSON.stringify(value), 'NX'])) === 'OK';
+      if (cfg.kind === 'memory') { if (alive(key)) return false; memory.set(key, JSON.stringify(value)); return true; }
+      throw new Error('No server storage configured');
+    },
     /** Counter with a time window (login attempts). */
     async hit(key, windowSec) {
       if (cfg.kind === 'redis') {

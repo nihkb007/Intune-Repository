@@ -1,28 +1,22 @@
 // End-to-end in real Chromium, against the local server that serves api/ like Vercel:
-//  A) portal with login: sign in, create presets, start one (folder = Chromium's private
+//  A) portal with login: create the account on the first-run page, create presets, start one (folder = Chromium's private
 //     file system; same browser API as a real drive), resume the latest session, a second
-//     laptop on the same folder, switch preset, sign out
+//     laptop on the same folder, switch preset, sign out, sign in again
 //  B) no login (static hosting): presets in the browser + the demo
 // Writes screenshots to docs/.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { chromium } from 'playwright-core';
 import { serve } from '../serve.mjs';
 
-const require = createRequire(import.meta.url);
-const { hashPassword } = require('../lib/auth.js');
 const here = path.dirname(new URL(import.meta.url).pathname);
 const shots = path.join(here, '..', 'docs');
 const exe = process.env.CHROMIUM_PATH || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome'].find((p) => fs.existsSync(p));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-Object.assign(process.env, {
-  ENGRAM_USERS: `nihko:${await hashPassword('correct horse battery')}`,
-  ENGRAM_SESSION_SECRET: 'e2e-secret-e2e-secret-e2e-secret-1234',
-  ENGRAM_STORE: 'memory',
-});
+// A fresh deployment: storage connected, setup code set, no account yet.
+Object.assign(process.env, { ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'E2E1-SETU-PCOD-E234' });
 const server = await serve(0);
 const url = `http://localhost:${server.address().port}/`;
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
@@ -62,14 +56,17 @@ await page.goto(url);
 await page.evaluate(async () => { const r = await navigator.storage.getDirectory(); for await (const [n] of r.entries()) await r.removeEntry(n, { recursive: true }); localStorage.clear(); });
 await writeFile('/E--code-app/s1.jsonl', session('s1', 'first task on the work laptop', 1_000_000, 'w1'));
 await page.reload();
-await page.waitForSelector('#lg-form');
-await shot('web-01-login');
-await page.fill('#lg-user', 'nihko');
-await page.fill('#lg-pass', 'wrong password');
-await page.click('#lg-go');
-await page.waitForFunction(() => document.querySelector('#lg-err').textContent.includes('Wrong'));
-await page.fill('#lg-pass', 'correct horse battery');
-await page.click('#lg-go');
+await page.waitForSelector('#su-form');
+assert.equal(await page.locator('.cx-state.ok').count(), 2, 'storage and setup code both detected');
+await page.fill('#su-user', 'nihko');
+await page.fill('#su-pass', 'correct horse battery');
+await page.fill('#su-pass2', 'correct horse battery');
+await page.fill('#su-code', 'wrong-code');
+await shot('web-00-first-run');
+await page.click('#su-go');
+await page.waitForFunction(() => document.querySelector('#su-err').textContent.includes('doesn’t match'));
+await page.fill('#su-code', 'e2e1 setu pcod e234');
+await page.click('#su-go');
 await page.waitForSelector('#pr-list');
 assert.ok(!(await page.evaluate(() => document.cookie)).includes('engram_session'), 'session cookie is HttpOnly');
 assert.match(await page.textContent('#portal'), /Saved to your account/);
@@ -121,6 +118,15 @@ await shot('web-05-setup');
 
 await page.click('#su-signout');
 await page.waitForSelector('#lg-form');
+await page.fill('#lg-user', 'nihko');
+await page.fill('#lg-pass', 'wrong password');
+await page.click('#lg-go');
+await page.waitForFunction(() => document.querySelector('#lg-err').textContent.includes('Wrong'));
+await shot('web-01-login');
+await page.fill('#lg-pass', 'correct horse battery');
+await page.click('#lg-go');
+await page.waitForSelector('#pr-list');
+assert.equal((await page.$$('.cx-preset[data-id]')).length, 2, 'signed back in to the same presets');
 
 // ---------------- B) static hosting: no login ----------------
 server.close();

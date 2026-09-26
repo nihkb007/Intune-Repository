@@ -1,5 +1,6 @@
 'use strict';
-const { authConfig, readSession, getCookie } = require('./auth');
+const { readSession, getCookie } = require('./auth');
+const { loadAuth } = require('./accounts');
 
 const json = (res, status, body) => {
   res.statusCode = status;
@@ -21,7 +22,7 @@ function sameOriginWrite(req) {
 }
 
 async function session(req, env = process.env) {
-  const cfg = authConfig(env);
+  const cfg = await loadAuth(env);
   if (!cfg.enabled) return { cfg, user: null };
   const s = await readSession(getCookie(req), cfg.secret);
   return { cfg, user: s && cfg.users.has(s.user) ? s.user : null };

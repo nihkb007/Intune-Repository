@@ -19,11 +19,12 @@ const W = { 'x-engram': '1' };
 test.before(async () => {
   users = `nihko:${await auth.hashPassword('correct horse battery')},other:${await auth.hashPassword('another long password')}`;
 });
-const withEnv = (env) => { for (const k of ['ENGRAM_USERS', 'ENGRAM_SESSION_SECRET', 'ENGRAM_STORE', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) delete process.env[k]; Object.assign(process.env, env); };
+const withEnv = (env) => { for (const k of ['ENGRAM_USERS', 'ENGRAM_SESSION_SECRET', 'ENGRAM_STORE', 'ENGRAM_SETUP_CODE', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) delete process.env[k]; Object.assign(process.env, env); };
+const resetMemory = () => require('../lib/store')._memory.clear();
 
 test('without login configured the portal runs open and keeps presets in the browser', async () => {
   withEnv({});
-  assert.deepEqual((await call('me')).json, { auth: false, misconfigured: false, store: 'none' });
+  assert.deepEqual((await call('me')).json, { auth: false, misconfigured: false, store: 'none', setup: { storage: false, code: false } });
   assert.equal((await call('presets')).status, 403);
   withEnv({ ENGRAM_USERS: users, ENGRAM_SESSION_SECRET: 'short' });
   assert.equal((await call('me')).json.misconfigured, true, 'short secret is reported, not silently accepted');
@@ -44,6 +45,35 @@ test('sign in, session cookie, sign out', async () => {
   assert.equal((await call('me', { cookie: tampered })).status, 401, 'tampered cookie rejected');
   const out = await call('logout', { method: 'POST', headers: W, cookie });
   assert.match(out.cookie, /Max-Age=0/);
+});
+
+test('first run: the account is made on the site with the setup code, once', async () => {
+  resetMemory();
+  const make = (body, ip = '3.3.3.1') => call('setup', { method: 'POST', body, headers: W, ip });
+  const good = { username: 'Nihko', password: 'correct horse battery', code: 'abcd-efgh-2345-wxyz' };
+  withEnv({ ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
+  assert.equal((await make(good)).status, 503, 'needs storage');
+  withEnv({ ENGRAM_STORE: 'memory' });
+  assert.deepEqual((await call('me')).json.setup, { storage: true, code: false });
+  assert.equal((await make(good)).status, 503, 'needs a setup code');
+  withEnv({ ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
+  assert.deepEqual((await call('me')).json.setup, { storage: true, code: true });
+  assert.equal((await call('setup', { method: 'POST', body: good, ip: '3.3.3.1' })).status, 403, 'cross-site posts refused');
+  assert.equal((await make({ ...good, code: 'WRONG-CODE-0000' })).status, 403);
+  assert.equal((await make({ ...good, password: 'short' })).status, 400);
+  assert.equal((await make({ ...good, username: 'a b' })).status, 400);
+  for (let i = 0; i < 8; i++) await make({ ...good, code: 'nope' }, '3.3.3.9');
+  assert.equal((await make(good, '3.3.3.9')).status, 429, 'setup code guessing is rate limited');
+  const ok = await make(good);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.user, 'nihko');
+  const cookie = ok.cookie.split(';')[0];
+  assert.deepEqual((await call('me', { cookie })).json, { auth: true, user: 'nihko', store: 'memory' });
+  assert.equal((await call('me')).status, 401, 'login is now required');
+  assert.equal((await make({ ...good, username: 'intruder' }, '3.3.3.2')).status, 409, 'only once');
+  assert.equal((await call('login', { method: 'POST', body: { username: 'nihko', password: 'correct horse battery' }, headers: W, ip: '3.3.3.3' })).status, 200);
+  assert.equal((await call('presets', { cookie })).status, 200);
+  resetMemory();
 });
 
 test('repeated wrong passwords are locked out for 15 minutes', async () => {
