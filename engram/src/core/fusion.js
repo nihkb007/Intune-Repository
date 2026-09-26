@@ -12,10 +12,15 @@ const estTokens = (s) => Math.ceil(String(s || '').length / 4);
 const MARK_BEGIN = '<!-- ENGRAM:BEGIN — managed by ENGRAM, edits inside this block are replaced -->';
 const MARK_END = '<!-- ENGRAM:END -->';
 
+// Transcripts may come from Windows or POSIX machines, so pick path rules from the root,
+// and always print forward slashes so capsules read the same everywhere.
 function rel(p, root) {
-  if (!root || !p) return p;
-  const r = path.relative(root, p);
-  return r && !r.startsWith('..') && !path.isAbsolute(r) ? r : p;
+  if (!p) return p;
+  const P = /^[A-Za-z]:[\\/]|^\\\\/.test(root || p) ? path.win32 : path.posix;
+  const slash = (s) => s.replace(/\\/g, '/');
+  if (!root) return slash(p);
+  const r = P.relative(root, p);
+  return slash(r && !r.startsWith('..') && !P.isAbsolute(r) ? r : p);
 }
 
 function normCmd(c) {

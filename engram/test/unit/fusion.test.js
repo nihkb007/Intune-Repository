@@ -46,3 +46,11 @@ test('managed block is appended, then replaced in place, keeping user content', 
   assert.equal(twice.split(MARK_END).length, 2, 'exactly one block');
   assert.equal(injectManagedBlock('', 'x'), `${MARK_BEGIN}\nx\n${MARK_END}\n`);
 });
+
+test('Windows transcript paths become forward-slash relative paths', () => {
+  const d = detail({ id: 'w', start: '2026-09-01', prompts: ['x'], files: { 'C:\\code\\app\\src\\b.ts': { read: 0, edit: 1, write: 0 }, 'D:\\other\\c.ts': { read: 1, edit: 0, write: 0 } } });
+  d.projectPath = 'C:\\code\\app';
+  const md = fuse([d]).markdown;
+  assert.match(md, /`src\/b\.ts` \(1× edit\)/);
+  assert.match(md, /`D:\/other\/c\.ts` \(1× read\)/, 'paths outside the project stay absolute');
+});
