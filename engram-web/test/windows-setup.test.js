@@ -28,7 +28,8 @@ for (const sh of shells) {
     assert.match(out1, /Done: Claude Code sessions now live on/);
     const link = path.join(claude, 'projects');
     assert.ok(fs.lstatSync(link).isSymbolicLink(), 'projects is now a junction');
-    assert.equal(fs.realpathSync(link).toLowerCase(), fs.realpathSync(drive).toLowerCase());
+    // .native expands Windows 8.3 short names (RUNNER~1) so both sides compare as long paths.
+    assert.equal(fs.realpathSync.native(link).toLowerCase(), fs.realpathSync.native(drive).toLowerCase());
     assert.equal(fs.readFileSync(path.join(drive, 'E--code-app', 's1.jsonl'), 'utf8'), '{"a":1}\n', 'existing session copied to the drive');
     assert.ok(fs.readdirSync(claude).some((n) => n.startsWith('projects.before-engram-')), 'original kept as backup');
     const settings = JSON.parse(fs.readFileSync(path.join(claude, 'settings.json'), 'utf8').replace(/^\uFEFF/, ''));
