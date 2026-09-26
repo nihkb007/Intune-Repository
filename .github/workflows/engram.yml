@@ -1,0 +1,45 @@
+name: ENGRAM build
+
+on:
+  push:
+    paths: ['engram/**', '.github/workflows/engram.yml']
+  pull_request:
+    paths: ['engram/**', '.github/workflows/engram.yml']
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: engram
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: engram/package-lock.json }
+      - run: npm ci
+      - run: npm test
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        with: { name: screenshots, path: engram/docs/screenshots }
+
+  installer:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { os: windows-latest, script: dist:win, glob: 'engram/dist/*.exe' }
+          - { os: ubuntu-latest, script: dist:linux, glob: "engram/dist/*.AppImage\nengram/dist/*.deb" }
+          - { os: macos-latest, script: dist:mac, glob: 'engram/dist/*.dmg' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: engram/package-lock.json }
+      - run: npm ci
+      - run: npm run ${{ matrix.script }}
+        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+      - uses: actions/upload-artifact@v4
+        with: { name: 'ENGRAM-${{ matrix.os }}', path: '${{ matrix.glob }}' }

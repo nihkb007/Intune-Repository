@@ -177,3 +177,12 @@ Intune Automation & Enterprise Endpoint Engineering
 
 GitHub: https://github.com/nihkb007/Intune-Repository  
 Created: 2026
+
+
+---
+
+## ENGRAM — Claude Command Center
+
+This repository also hosts **[ENGRAM](engram/)**, a cyberpunk desktop command center for Claude Code: per-project cost intelligence, a permanent session archive with replay, a memory vault, session fusion into compact context capsules, and a multi-account bridge that keeps your context no matter which Claude account you are signed into. Ships as a Windows NSIS installer (plus AppImage/deb/dmg). See [`engram/README.md`](engram/README.md).
+
+![ENGRAM](engram/docs/screenshots/01-nexus.png)

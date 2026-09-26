@@ -1,0 +1,103 @@
+{
+  "name": "engram",
+  "productName": "ENGRAM",
+  "version": "1.0.0",
+  "description": "ENGRAM — Claude Command Center. Cost intelligence, memory vault, session recordings and cross-account context bridge for Claude Code.",
+  "main": "src/main/main.js",
+  "author": "ENGRAM",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "demo": "node scripts/make-demo-data.js && electron . --demo",
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:e2e": "node scripts/make-demo-data.js && node test/e2e/screenshots.js",
+    "icons": "electron scripts/make-icons.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis",
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@fontsource/orbitron": "^5.1.0",
+    "@fontsource/rajdhani": "^5.1.0",
+    "dompurify": "^3.4.16",
+    "marked": "^14.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "playwright-core": "^1.48.0"
+  },
+  "homepage": "https://github.com/nihkb007/Intune-Repository",
+  "build": {
+    "appId": "dev.engram.commandcenter",
+    "productName": "ENGRAM",
+    "copyright": "ENGRAM — Claude Command Center",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "scripts/make-demo-data.js",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "ENGRAM-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "ENGRAM",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "license": "build/license.txt"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development",
+      "artifactName": "ENGRAM-${version}-${arch}.${ext}",
+      "maintainer": "ENGRAM <engram@example.dev>"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nihkb007/Intune-Repository.git",
+    "directory": "engram"
+  }
+}
