@@ -1,42 +1,65 @@
-# ENGRAM Web
+# ENGRAM Web: portal
 
-The ENGRAM command center as a website: Claude Code costs, session replays, the notes
-vault and fusion capsules. It works on the Claude Code sessions stored on your external
-drive, so **both laptops, with either Claude account, continue the same sessions**. There's
-nothing to install, and nothing is uploaded: the page runs entirely in your browser tab.
+The ENGRAM command center as a website you sign in to:
+- Claude Code costs, session replays, the notes vault and fusion capsules
+- **presets**, one per laptop: which drive and folder, which account, what to open first,
+  including **resume my last session**
 
-![Connect](docs/web-01-connect.png)
+Your Claude sessions stay on your external drive and are read only by the browser tab. The
+server stores only your presets.
 
-## Use it
+| Sign in | Presets | Resume |
+| --- | --- | --- |
+| ![Login](docs/web-01-login.png) | ![Presets](docs/web-03-presets.png) | ![Resume](docs/web-04-resume.png) |
 
-1. **Once per laptop:** give your drive the same letter everywhere (e.g. `E:`), close
-   Claude Code, open PowerShell and paste the **setup command** the site shows. It:
-   - copies that laptop's existing sessions to `E:\claude-sessions`
-   - keeps the original folder as a backup
-   - links `%USERPROFILE%\.claude\projects` to the drive with a junction (no admin needed)
-   - makes Claude Code keep sessions for 10 years
+## Everyday use
 
-   Running it twice is harmless. An undo command is on the SETUP page.
-2. Open the site in **Edge or Chrome**, name the laptop (e.g. WORK), and choose
-   `E:\claude-sessions`. Next time, one click reconnects. Recent Edge and Chrome versions
-   remember the permission, so often no click is needed at all.
-3. Work as usual: `cd E:\your-project` → `claude --continue`. The site refreshes every 20
-   seconds while open.
+1. Open the portal and sign in.
+2. Pick a preset (e.g. **WORK LAPTOP**). The first time on each laptop, point it to
+   `E:\claude-sessions` once. After that it remembers.
+3. You land where the preset says. With **Latest session (resume)**, click **COPY RESUME
+   COMMAND** and paste it into a terminal: `Set-Location 'E:\your-project'; claude --resume <id>`.
 
-What gets stored where:
+**First time on a laptop:** the portal has a *one-time setup* command. Close Claude Code,
+paste it into PowerShell. It moves that laptop's sessions to the drive and links Claude
+Code to them (a junction, no admin needed). Running it again is harmless. There's an undo
+command under SETUP.
 
-| Where | What |
-| --- | --- |
-| `E:\claude-sessions\` | Claude Code's own session files (written by Claude Code) |
-| `E:\claude-sessions\.engram\engram.json` | ENGRAM's notes, capsules, and which laptop ran which message. It lives on the drive, so both laptops share it. |
-| Browser | Only the laptop name and the remembered folder permission |
+## Deploy to Vercel
 
-Costs are split per laptop: each message is credited to the laptop whose browser first
-saw it.
+The `ENGRAM build` GitHub workflow tests everything, then deploys the portal to Vercel on
+every push.
 
-The page can't open terminals or folders on its own. Buttons that would, copy the right
-command instead (for example `Set-Location … ; claude --resume <id>`). "Inject into
-CLAUDE.md" asks you to pick the project folder.
+1. **Create the project** in Vercel (import this repo, or create an empty project).
+2. **Create the login** on any computer with Node:
+   ```bash
+   cd engram-web && npm ci && npm run make-user -- nihko
+   ```
+   It asks for a password (12+ characters) and prints `ENGRAM_USERS=…` (a salted hash, not
+   the password) and a random `ENGRAM_SESSION_SECRET=…`.
+3. **Add GitHub repository secrets** (*Settings → Secrets and variables → Actions*):
+
+   | Secret | Where to find it |
+   | --- | --- |
+   | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
+   | `VERCEL_ORG_ID` | Vercel → Team (or personal account) Settings → General → ID |
+   | `VERCEL_PROJECT_ID` | Vercel → Project → Settings → General → Project ID |
+   | `ENGRAM_USERS`, `ENGRAM_SESSION_SECRET` | output of step 2 (optional here: you can also add them directly in Vercel) |
+
+4. **Presets across laptops:** in Vercel → *Storage*, create an **Upstash Redis** database
+   and connect it to the project. It adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+   Without it, sign-in still works but presets stay in each browser.
+5. Push, or re-run the workflow. The deploy job first sets the project's Root Directory to
+   `engram-web` (with files outside it included) and the login variables through the
+   Vercel API, then builds and deploys. The deployment URL appears in the run summary.
+
+Security notes:
+- Passwords are stored only as PBKDF2 hashes. Sessions are HMAC-signed, HttpOnly, Secure
+  cookies (30 days).
+- Writes require a same-origin header.
+- After 8 failed sign-ins, an address is locked out for 15 minutes.
+- Without `ENGRAM_USERS` and `ENGRAM_SESSION_SECRET` the portal runs without login, with
+  presets kept per browser. That's the same as the static build.
 
 ## How it works
 
@@ -47,6 +70,8 @@ Electron-specific is swapped out:
 - `src/engine.js` reads the chosen folder through the File System Access API into an
   in-memory file system (`src/shims/fs.js`), so the engine code runs as-is.
 - `src/api.js` provides the same `window.engram` interface the desktop screens call.
+- `api/*.js` + `lib/` are the portal server: `me`, `login`, `logout`, `presets` (Vercel Node
+  functions, no framework). `serve.mjs` runs them locally the same way.
 - `src/setup-script.js` generates the PowerShell setup/undo commands. CI runs them on a
   real Windows machine in Windows PowerShell 5.1 and PowerShell 7.
 
@@ -55,24 +80,12 @@ Electron-specific is swapped out:
 ```bash
 npm ci
 npm run build      # -> dist/ (static: index.html, engram-web.js, engram-web.css, fonts, demo-pack.json)
-npm run serve      # http://localhost:5173
+npm run serve      # http://localhost:5173  (add ENGRAM_USERS, ENGRAM_SESSION_SECRET, ENGRAM_STORE=memory to try the login)
 npm test           # unit tests (+ real PowerShell tests on Windows)
-npm run test:e2e   # builds, then drives Chromium: demo, real folder, two laptops sharing it
+npm run test:e2e   # builds, then drives Chromium: sign in, presets, resume, a second laptop, sign out, demo
 ```
 
 `dist/` also works when opened straight from disk (it's one classic script, not ES
 modules), except for the demo, which needs http(s).
-
-## Hosting
-
-**GitHub Pages:** the `ENGRAM build` workflow builds and tests the site and deploys
-`dist/`.
-- One-time: *Settings → Pages → Source: GitHub Actions*.
-- By default Pages only deploys from the default branch. Merge to `main`, or allow this
-  branch under *Settings → Environments → github-pages*.
-
-**Vercel (later):** import the repo, set *Root Directory* to `engram-web`, and keep
-*"Include files outside the root directory"* on (the build reads `../engram`).
-`vercel.json` already sets the install, build and output settings.
 
 Built by [butchermedia.cc](https://butchermedia.cc)

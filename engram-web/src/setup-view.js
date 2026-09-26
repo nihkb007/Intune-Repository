@@ -1,5 +1,5 @@
 // SETUP page of ENGRAM Web (takes the place of BRIDGE in the desktop app).
-import { state, call, toast, applySnapshot, rerender } from '../../engram/src/renderer/app.js';
+import { state, call, toast, applySnapshot, rerender, go } from '../../engram/src/renderer/app.js';
 import { views } from '../../engram/src/renderer/views.js';
 import { esc, money, tokens, icon } from '../../engram/src/renderer/util.js';
 import { setupScript, undoScript } from './setup-script.js';
@@ -7,6 +7,32 @@ import { setupScript, undoScript } from './setup-script.js';
 export function register(engine) {
   views.setup = (root) => setupView(root, engine);
   if (state.view === 'setup') rerender();
+}
+
+const ready = async () => { for (let i = 0; i < 100 && !state.model; i++) await new Promise((r) => setTimeout(r, 100)); };
+
+export async function openView(view) {
+  await ready();
+  if (view && view !== 'nexus') go(view);
+}
+
+/** Preset "resume": open the most recent session, where COPY RESUME COMMAND is one click. */
+export async function openLatestSession() {
+  await ready();
+  const s = state.model?.sessions?.[0];
+  if (!s) { toast('No sessions in this folder yet.', 'NOTHING TO RESUME', 'var(--yellow)'); return; }
+  go('replay', { id: s.id, label: s.title, atEnd: true });
+  toast('Press COPY RESUME COMMAND, then paste it into a terminal.', 'LATEST SESSION', 'var(--green)');
+}
+
+function portalPanel() {
+  const p = window.__engramPortal;
+  if (!p) return '';
+  return `<div class="panel" style="margin-bottom:18px;--pc:var(--violet)">
+    <div class="panel-h"><h3><b>00</b>PORTAL</h3><div class="tools"><button class="btn ghost small" id="su-preset">SWITCH PRESET</button>${p.auth ? '<button class="btn danger small" id="su-signout">SIGN OUT</button>' : ''}</div></div>
+    <div class="set-row"><div><b>Preset</b><small>${esc(p.preset.name)} · ${esc(p.preset.laptop)} · <span class="mono">${esc(p.preset.folder)}</span></small></div><span class="dot" style="--c:${p.preset.color}"></span></div>
+    ${p.user ? `<div class="set-row"><div><b>Signed in as</b><small>${esc(p.user)}</small></div></div>` : ''}
+  </div>`;
 }
 
 function setupView(root, engine) {
@@ -20,6 +46,7 @@ function setupView(root, engine) {
   root.innerHTML = `
     <div class="page-head"><div><h1><small>ENGRAM WEB</small>SETUP</h1><p>The same Claude Code sessions on both laptops, stored on your drive.</p></div>
       <div class="actions"><button class="btn ghost" id="su-rescan">${icon('refresh')}RESCAN</button>${engine.demo ? '' : `<button class="btn" id="su-switch">${icon('folder')}OPEN ANOTHER FOLDER</button>`}</div></div>
+    ${portalPanel()}
     <div class="grid g-2e">
       <div class="panel" style="--pc:var(--green)">
         <div class="panel-h"><h3><b>01</b>THIS BROWSER</h3></div>
@@ -45,6 +72,12 @@ function setupView(root, engine) {
       <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">Undo on a laptop</summary><pre class="cmdblock" id="su-undo"></pre><button class="btn ghost small" id="su-copy-undo">COPY UNDO COMMAND</button></details>
     </div>`;
 
+  const p = window.__engramPortal;
+  if (p) {
+    root.querySelector('#su-preset').onclick = () => p.switchPreset();
+    const out = root.querySelector('#su-signout');
+    if (out) out.onclick = () => p.signOut();
+  }
   root.querySelector('#su-script').textContent = setupScript(target);
   root.querySelector('#su-undo').textContent = undoScript(target);
   root.querySelector('#su-copy').onclick = async () => { await call(api.clipboard, setupScript(target)); toast('Paste it into PowerShell on this laptop.', 'SETUP COMMAND COPIED', 'var(--green)'); };

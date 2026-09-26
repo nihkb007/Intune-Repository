@@ -332,7 +332,7 @@ function recordings(root, params) {
 // =====================================================================
 // REPLAY
 // =====================================================================
-async function replay(root, { id, autoplay = true }) {
+async function replay(root, { id, autoplay = true, atEnd = false }) {
   const [rep, det] = await Promise.all([call(api.sessionReplay, id), call(api.sessionDetail, id)]);
   if (!rep) { root.innerHTML = '<div class="empty"><h4>RECORDING UNAVAILABLE</h4></div>'; return; }
   const s = rep.session;
@@ -378,9 +378,9 @@ async function replay(root, { id, autoplay = true }) {
   const scrub = $(root, '#rp-scrub');
   const clock = $(root, '#rp-clock');
   const playBtn = $(root, '#rp-play');
-  let pos = 0;
+  let pos = atEnd ? events.length : 0; // atEnd: show the whole conversation (resume view)
   let speed = 4;
-  let playing = autoplay;
+  let playing = autoplay && !atEnd;
   let timer = null;
 
   const evNode = (e, animate) => {
@@ -446,7 +446,7 @@ async function replay(root, { id, autoplay = true }) {
   $(root, '#rp-resume').onclick = () => (s.remote ? bringHere(s) : launch({ projectPath: s.projectPath, resumeId: s.id }));
   if (!s.remote && !state.web) $(root, '#rp-copy').onclick = () => copyLaunch({ projectPath: s.projectPath, resumeId: s.id });
   $(root, '#rp-fuse').onclick = async () => { const cap = await call(api.fusion.create, { ids: [s.id] }); state.capsules.unshift(cap); go('fusion', { id: cap.id }); };
-  update();
+  if (atEnd) rebuild(); else update();
   loop();
   return () => { playing = false; clearTimeout(timer); };
 }

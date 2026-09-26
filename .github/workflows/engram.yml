@@ -95,17 +95,39 @@ jobs:
       - name: Build and test in Chrome
         run: npm run test:e2e
         env: { CHROMIUM_PATH: /usr/bin/google-chrome }
-      - uses: actions/upload-pages-artifact@v3
-        with: { path: engram-web/dist }
 
-  # Publishes the website to GitHub Pages. One-time: Settings -> Pages -> Source: GitHub Actions.
-  pages:
-    needs: web
+  # Deploys the portal to Vercel on every push. Needs repository secrets (Settings →
+  # Secrets and variables → Actions): VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, and
+  # optionally ENGRAM_USERS + ENGRAM_SESSION_SECRET (from `npm run make-user`) for the login.
+  # Without them the job just says so and succeeds.
+  vercel:
+    needs: [test, web]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    continue-on-error: true # stays green until Pages is switched on
-    permissions: { pages: write, id-token: write }
-    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      - id: check
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then echo "go=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Vercel secrets not set yet: skipping deploy (see engram-web/README.md)"; fi
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.go == 'true'
+        uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Configure Vercel project + login variables
+        if: steps.check.outputs.go == 'true'
+        run: node engram-web/tools/vercel-setup.mjs
+        env:
+          ENGRAM_USERS: ${{ secrets.ENGRAM_USERS }}
+          ENGRAM_SESSION_SECRET: ${{ secrets.ENGRAM_SESSION_SECRET }}
+      - name: Build and deploy (production)
+        if: steps.check.outputs.go == 'true'
+        run: |
+          npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
+          url=$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"

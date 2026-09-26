@@ -8,7 +8,9 @@
     "build": "node build.mjs",
     "serve": "node serve.mjs",
     "test": "node --test \"test/*.test.js\"",
-    "test:e2e": "node build.mjs && node test/e2e.mjs"
+    "test:e2e": "node build.mjs && node test/e2e.mjs",
+    "make-user": "node tools/make-user.js",
+    "vercel-setup": "node tools/vercel-setup.mjs"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.1.0",
@@ -19,5 +21,8 @@
     "marked": "^14.1.0",
     "path-browserify": "^1.0.1",
     "playwright-core": "^1.48.0"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
