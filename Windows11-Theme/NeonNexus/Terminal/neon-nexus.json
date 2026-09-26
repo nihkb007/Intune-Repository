@@ -1,0 +1,41 @@
+{
+  "schemes": [
+    {
+      "name": "Neon Nexus",
+      "background": "#07060F",
+      "foreground": "#D8DEF5",
+      "selectionBackground": "#2A2450",
+      "cursorColor": "{{ACCENT}}",
+      "black": "#0B0A18",
+      "red": "#FF2E63",
+      "green": "#39FF88",
+      "yellow": "#FFD23F",
+      "blue": "#3D8BFF",
+      "purple": "#B45CFF",
+      "cyan": "#00E5FF",
+      "white": "#C8CEE8",
+      "brightBlack": "#4A4770",
+      "brightRed": "#FF6B8F",
+      "brightGreen": "#7DFFB2",
+      "brightYellow": "#FFE580",
+      "brightBlue": "#7AB0FF",
+      "brightPurple": "#D199FF",
+      "brightCyan": "#7FF3FF",
+      "brightWhite": "#FFFFFF"
+    }
+  ],
+  "profiles": [
+    {
+      "name": "NEON NEXUS // PowerShell",
+      "commandline": "powershell.exe -NoLogo",
+      "icon": "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png",
+      "colorScheme": "Neon Nexus",
+      "font": { "face": "Cascadia Code", "size": 11 },
+      "opacity": 82,
+      "useAcrylic": true,
+      "cursorShape": "filledBox",
+      "padding": "14",
+      "tabColor": "{{ACCENT}}"
+    }
+  ]
+}

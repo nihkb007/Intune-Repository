@@ -84,6 +84,16 @@ This automation continuously realigns ownership based on real user behavior.
 
 ---
 
+## Windows 11 Theme: NEON NEXUS
+
+A dark neon Windows 11 theme with 5 accent colors, 10 4K wallpapers, a custom accent palette, a lock screen image and a Windows Terminal color scheme. Install it with one double-click; uninstall restores your previous setup. It can also be deployed per user as an Intune Win32 app.
+
+[Windows11-Theme/NeonNexus](Windows11-Theme/NeonNexus/README.md)
+
+![NEON NEXUS](Windows11-Theme/NeonNexus/preview.jpg)
+
+---
+
 ## Custom Script Development
 
 Need something specific for your environment?
