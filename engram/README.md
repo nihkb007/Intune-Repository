@@ -112,3 +112,7 @@ All screenshots use generated demo data.
 | ![Replay](docs/screenshots/05-replay.png) | ![Fusion](docs/screenshots/06-fusion.png) |
 | ![Vault](docs/screenshots/07-vault.png) | ![Bridge](docs/screenshots/08-bridge.png) |
 | ![System](docs/screenshots/10-system.png) | ![Palette](docs/screenshots/11-command-palette.png) |
+
+---
+
+Built by [butchermedia.cc](https://butchermedia.cc)

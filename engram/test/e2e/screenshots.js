@@ -77,6 +77,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await shot('09-bridge-synced');
 
   await nav('settings');
+  assert.equal(await win.getAttribute('.credit', 'href'), 'https://butchermedia.cc', 'rail credit links to butchermedia.cc');
+  assert.ok(await win.$('.settings-grid a[href="https://butchermedia.cc"]'), 'About links to butchermedia.cc');
   await shot('10-system');
 
   await nav('nexus');

@@ -693,6 +693,7 @@ async function settings(root) {
       </div>
       <div class="panel span-2" style="--pc:var(--magenta)">${panelHead('03', 'ABOUT')}
         <p style="margin:0">ENGRAM ${esc(init.version)} · Claude command center. Reads Claude Code transcripts locally — nothing leaves this machine. Shortcuts: <span class="mono">Ctrl+K</span> palette · <span class="mono">Ctrl+R</span> rescan · <span class="mono">Ctrl+S</span> save engram.</p>
+        <p style="margin:10px 0 0">Built by <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
       </div>
     </div>`;
   const save = async (patch) => { state.settings = await call(api.settings.update, patch); document.body.dataset.effects = state.settings.effects; };

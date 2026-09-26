@@ -149,6 +149,8 @@ body[data-effects="off"] *, body[data-effects="off"] *::before, body[data-effect
 .live { display: flex; align-items: center; gap: 8px; font: 700 10px var(--f-display); letter-spacing: .25em; color: var(--green); }
 .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.6s infinite; }
 @keyframes pulse { 50% { opacity: .25; } }
+.credit { font: 700 9px var(--f-display); letter-spacing: .3em; color: var(--muted); text-decoration: none; text-align: center; padding: 2px 0; transition: color .2s, text-shadow .2s; }
+.credit:hover { color: var(--magenta); text-shadow: var(--glow-m); }
 .rail-stat { font: 11px/1.6 var(--f-mono); color: var(--muted); }
 
 /* ---------- main ---------- */
