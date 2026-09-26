@@ -71,10 +71,11 @@ export function modal(title, bodyHtml, { okLabel = 'CONFIRM', onOk, wide = false
 }
 
 // ---------- navigation ----------
-const LABELS = { nexus: 'NEXUS', projects: 'PROJECTS', recordings: 'RECORDINGS', vault: 'VAULT', fusion: 'FUSION', bridge: 'BRIDGE', settings: 'SYSTEM', project: 'PROJECT', replay: 'REPLAY' };
-const RAIL = { project: 'projects', replay: 'recordings' };
+const LABELS = { nexus: 'NEXUS', projects: 'PROJECTS', recordings: 'RECORDINGS', vault: 'VAULT', fusion: 'FUSION', bridge: 'BRIDGE', setup: 'SETUP', settings: 'SYSTEM', project: 'PROJECT', replay: 'REPLAY' };
+const RAIL = { project: 'projects', replay: 'recordings', bridge: 'setup' };
 
 export function go(view, params = {}) {
+  if (state.web && view === 'bridge') view = 'setup'; // the web version has a setup page instead
   state.view = view;
   state.params = params;
   if (typeof state.cleanup === 'function') { try { state.cleanup(); } catch {} }
@@ -198,6 +199,7 @@ async function bootSequence(snapshot) {
 async function init() {
   const snap = await call(api.init);
   state.demo = snap.demo;
+  state.web = !!snap.web;
   state.platform = snap.platform;
   applySnapshot(snap);
   document.getElementById('ver').textContent = 'v' + snap.version;

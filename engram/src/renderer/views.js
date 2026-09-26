@@ -84,6 +84,7 @@ async function fuseProject(key, title) {
 }
 
 async function launch(opts = {}) {
+  if (state.web) return copyLaunch(opts); // a web page cannot open a terminal
   const a = acct(opts.accountId || state.activeAccountId);
   try {
     const cmd = await call(api.launch.terminal, { accountId: a.id, projectPath: opts.projectPath, resumeId: opts.resumeId });
@@ -179,6 +180,7 @@ function nexus(root) {
   $$(root, '.recent-row').forEach((r) => { r.onclick = () => go('replay', { id: r.dataset.id, label: r.dataset.label }); });
   $$(root, '[data-go]').forEach((b) => { b.onclick = () => go(b.dataset.go); });
   $(root, '#nx-launch').onclick = () => launch();
+  if (state.web) $(root, '#nx-launch').remove(); // needs a project folder: use RESUME in a recording
   $(root, '#nx-fuse').onclick = async () => {
     const ids = m.sessions.slice(0, 5).map((s) => s.id);
     const cap = await call(api.fusion.create, { ids, title: 'Latest 5 sessions — fused context' });
@@ -262,6 +264,7 @@ async function project(root, { key }) {
   $$(root, '[data-note]').forEach((n) => { n.onclick = () => go('vault', { id: n.dataset.note }); });
   $(root, '#pd-back').onclick = () => go('projects');
   $(root, '#pd-open').onclick = () => api.openPath(p.path);
+  if (state.web) $(root, '#pd-open').remove();
   $(root, '#pd-fuse').onclick = () => fuseProject(key, `${p.name} — project memory capsule`);
   $(root, '#pd-launch').onclick = () => launch({ projectPath: p.path });
   $(root, '#pd-note').onclick = () => go('vault', { new: true, project: key, kind: 'directive' });
@@ -341,7 +344,7 @@ async function replay(root, { id, autoplay = true }) {
 
   root.innerHTML = `
     ${head(`SESSION RECORDING · ${esc(s.projectName)}`, esc(s.title.length > 60 ? s.title.slice(0, 58) + '…' : s.title), `<span class="mono" style="font-size:12px">${esc(s.id)} · ${when(s.startedAt)} · recorded on <b style="color:${a.color}">${esc(a.name)}</b></span>`,
-      `<button class="btn ghost" id="rp-back">${icon('back')}BACK</button>${s.remote ? '' : `<button class="btn ghost" id="rp-copy">${icon('copy')}RESUME CMD</button>`}<button class="btn mag" id="rp-fuse">${icon('fusion')}FUSE</button><button class="btn" id="rp-resume" style="background:${act.color};box-shadow:0 0 14px ${act.color}">${icon('term')}${s.remote ? 'BRING HERE &amp; RESUME ON' : 'RESUME ON'} ${esc(act.name)}</button>`)}
+      `<button class="btn ghost" id="rp-back">${icon('back')}BACK</button>${s.remote || state.web ? '' : `<button class="btn ghost" id="rp-copy">${icon('copy')}RESUME CMD</button>`}<button class="btn mag" id="rp-fuse">${icon('fusion')}FUSE</button><button class="btn" id="rp-resume" style="background:${act.color};box-shadow:0 0 14px ${act.color}">${icon('term')}${state.web ? 'COPY RESUME COMMAND' : `${s.remote ? 'BRING HERE &amp; RESUME ON' : 'RESUME ON'} ${esc(act.name)}`}</button>`)}
     <div class="replay">
       <div class="panel stream">
         <div class="transport">
@@ -441,7 +444,7 @@ async function replay(root, { id, autoplay = true }) {
   $$(root, '#rp-speed button').forEach((b) => { b.onclick = () => { speed = +b.dataset.s; $$(root, '#rp-speed button').forEach((x) => x.classList.toggle('on', x === b)); }; });
   $(root, '#rp-back').onclick = () => history.length && go('recordings');
   $(root, '#rp-resume').onclick = () => (s.remote ? bringHere(s) : launch({ projectPath: s.projectPath, resumeId: s.id }));
-  if (!s.remote) $(root, '#rp-copy').onclick = () => copyLaunch({ projectPath: s.projectPath, resumeId: s.id });
+  if (!s.remote && !state.web) $(root, '#rp-copy').onclick = () => copyLaunch({ projectPath: s.projectPath, resumeId: s.id });
   $(root, '#rp-fuse').onclick = async () => { const cap = await call(api.fusion.create, { ids: [s.id] }); state.capsules.unshift(cap); go('fusion', { id: cap.id }); };
   update();
   loop();
@@ -853,6 +856,7 @@ async function settings(root) {
   $(root, '#st-arch').onchange = (e) => save({ autoArchive: e.target.checked });
   $(root, '#st-fx').onchange = (e) => save({ effects: e.target.value });
   $(root, '#st-open').onclick = () => api.openPath(init.dataDir);
+  if (state.web) $(root, '#st-open').remove();
   $(root, '#st-price').onclick = async () => {
     const overrides = {};
     $$(root, 'tr[data-model]').forEach((tr) => {

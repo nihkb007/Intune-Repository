@@ -244,9 +244,13 @@ class Scanner {
   _aggregate(sessionList, files, ms) {
     const me = identity(this.store).id;
     const accounts = [
-      ...this.store.data.accounts.map((a) => (a.machineId && a.machineId !== me
-        ? { ...a, remote: true, machine: this.store.data.machines?.[a.machineId]?.name || 'other laptop', name: `${a.name} @ ${this.store.data.machines?.[a.machineId]?.name || 'other laptop'}` }
-        : a)),
+      ...this.store.data.accounts.map((a) => {
+        if (!a.machineId || a.machineId === me) return a;
+        const machine = this.store.data.machines?.[a.machineId]?.name || 'other laptop';
+        // "WORK @ WORK-LAPTOP", or just "WORK" when the account is named after its laptop.
+        const name = a.name.toLowerCase() === machine.toLowerCase() ? a.name : `${a.name} @ ${machine}`;
+        return { ...a, remote: true, machine, name };
+      }),
       ...this.extraSources.map((x) => x.account),
     ];
     const projects = new Map();

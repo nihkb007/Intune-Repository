@@ -1,0 +1,23 @@
+{
+  "name": "engram-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ENGRAM in the browser: Claude Code cost intelligence, session replays and memory vault for sessions stored on your drive. Static site, no server, nothing leaves your computer.",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "test:e2e": "node build.mjs && node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@fontsource/orbitron": "^5.1.0",
+    "@fontsource/rajdhani": "^5.1.0",
+    "dompurify": "^3.1.0",
+    "esbuild": "^0.24.0",
+    "marked": "^14.1.0",
+    "path-browserify": "^1.0.1",
+    "playwright-core": "^1.48.0"
+  }
+}

@@ -1,0 +1,23 @@
+/* ENGRAM Web additions on top of the desktop app's stylesheet */
+body.web .winctl, body.web .brand-ver { display: none; }
+body.web #titlebar { -webkit-app-region: no-drag; }
+body.connecting #titlebar, body.connecting #rail, body.connecting #view, body.connecting #boot { visibility: hidden; }
+
+#connect { position: fixed; inset: 0; z-index: 120; overflow-y: auto; display: flex; justify-content: center; padding: 6vh 20px 40px; background: radial-gradient(circle at 50% 20%, rgba(13, 20, 38, .92), rgba(2, 3, 8, .97) 70%); }
+.cx { width: 760px; max-width: 100%; }
+.cx-logo { font: 900 56px/1 var(--f-display); letter-spacing: .18em; color: var(--cyan); text-shadow: var(--glow-c); text-align: center; display: block; }
+.cx-sub { font: 700 11px var(--f-display); letter-spacing: .5em; color: var(--magenta); text-shadow: var(--glow-m); text-align: center; margin: 14px 0 22px; }
+.cx-lead { color: var(--ink-2); font-size: 17px; text-align: center; margin: 0 auto 22px; max-width: 620px; }
+.cx-warn { border-left: 3px solid var(--yellow); background: rgba(252, 238, 10, .06); padding: 10px 14px; margin-bottom: 16px; }
+.cx-step { display: grid; grid-template-columns: 40px 1fr; gap: 14px; padding: 18px 20px; margin-bottom: 14px; background: var(--panel); border: 1px solid var(--line); clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); }
+.cx-n { width: 34px; height: 34px; display: grid; place-items: center; font: 900 16px var(--f-display); color: var(--bg); background: var(--cyan); box-shadow: var(--glow-c); clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+.cx-step > div { min-width: 0; }
+.cx-step h3 { margin: 4px 0 8px; font: 700 12px var(--f-display); letter-spacing: .25em; color: var(--ink); }
+.cx-step p { margin: 0 0 10px; color: var(--ink-2); }
+.cx-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 10px; font-weight: 600; }
+.cx-row input { width: 200px; height: 34px; padding: 0 10px; background: rgba(0, 6, 16, .6); border: 1px solid var(--line); color: var(--ink); font: 600 15px var(--f-ui); outline: none; }
+.cx-row input#cx-letter { width: 44px; text-align: center; text-transform: uppercase; font-family: var(--f-mono); }
+.cx-row .muted { font-weight: 500; font-size: 13px; }
+.cx-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+#cx-script, .cmdblock { margin: 0 0 10px; padding: 12px 14px; max-height: 220px; overflow: auto; background: rgba(0, 0, 0, .5); border: 1px solid var(--line); border-left: 2px solid var(--green); font: 11.5px/1.55 var(--f-mono); color: var(--green); white-space: pre; user-select: text; }
+.cx-foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; }

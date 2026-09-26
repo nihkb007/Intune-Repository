@@ -2,9 +2,9 @@ name: ENGRAM build
 
 on:
   push:
-    paths: ['engram/**', '.github/workflows/engram.yml']
+    paths: ['engram/**', 'engram-web/**', '.github/workflows/engram.yml']
   pull_request:
-    paths: ['engram/**', '.github/workflows/engram.yml']
+    paths: ['engram/**', 'engram-web/**', '.github/workflows/engram.yml']
   workflow_dispatch:
 
 defaults:
@@ -36,6 +36,9 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: engram/package-lock.json }
       - run: npm ci
       - run: npm test
+      - name: Web setup command on real Windows (PowerShell 5.1 + 7)
+        working-directory: engram-web
+        run: npm ci && npm test
       - name: Build installer + portable zip
         run: npm run dist:win
         env:
@@ -77,3 +80,32 @@ jobs:
             engram/dist/ENGRAM-Setup-*.exe
             engram/dist/ENGRAM-Portable-*.zip
             engram/dist/SHA256SUMS.txt
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engram-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: engram-web/package-lock.json }
+      - run: npm ci
+      - run: npm test
+      - name: Build and test in Chrome
+        run: npm run test:e2e
+        env: { CHROMIUM_PATH: /usr/bin/google-chrome }
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: engram-web/dist }
+
+  # Publishes the website to GitHub Pages. One-time: Settings -> Pages -> Source: GitHub Actions.
+  pages:
+    needs: web
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true # stays green until Pages is switched on
+    permissions: { pages: write, id-token: write }
+    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
