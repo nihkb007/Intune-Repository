@@ -42,8 +42,8 @@ every push.
    | Secret | Where to find it |
    | --- | --- |
    | `VERCEL_TOKEN` | Vercel → Account Settings → Tokens |
-   | `VERCEL_ORG_ID` | Vercel → Team (or personal account) Settings → General → ID |
-   | `VERCEL_PROJECT_ID` | Vercel → Project → Settings → General → Project ID |
+   | `VERCEL_PROJECT_ID` | optional: the workflow already names this repo's project (`prj_1oEZ…`) |
+   | `VERCEL_ORG_ID` | optional: looked up from the project |
    | `ENGRAM_USERS`, `ENGRAM_SESSION_SECRET` | output of step 2 (optional here: you can also add them directly in Vercel) |
 
 4. **Presets across laptops:** in Vercel → *Storage*, create an **Upstash Redis** database
