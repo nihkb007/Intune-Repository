@@ -28,6 +28,14 @@ fs.mkdirSync(path.join(app, 'ENGRAM-data'));
 fs.writeFileSync(path.join(app, 'ENGRAM-data', 'README.txt'),
   'ENGRAM keeps its vault, archived recordings and settings in this folder while it exists.\r\n' +
   'Delete or rename this folder to make ENGRAM use %APPDATA%\\ENGRAM instead.\r\n');
+// Pre-built connection: ENGRAM_LINK_FOLDER=\\NAS\engram bakes the shared folder in, so
+// ENGRAM links itself on first launch. Without it, ship an example to copy.
+const example = { linkFolder: '\\\\NAS\\engram', mode: 'full' };
+fs.writeFileSync(path.join(app, 'engram.config.example.json'), JSON.stringify(example, null, 2) + '\n');
+if (process.env.ENGRAM_LINK_FOLDER) {
+  fs.writeFileSync(path.join(app, 'engram.config.json'), JSON.stringify({ linkFolder: process.env.ENGRAM_LINK_FOLDER, mode: 'full' }, null, 2) + '\n');
+  console.log(`portable: pre-linked to ${process.env.ENGRAM_LINK_FOLDER}`);
+}
 fs.writeFileSync(path.join(app, 'START-HERE.txt'), [
   `ENGRAM ${version} - portable edition`,
   '',
@@ -35,7 +43,14 @@ fs.writeFileSync(path.join(app, 'START-HERE.txt'), [
   '2. Double-click ENGRAM.exe.',
   '3. If Windows shows "Windows protected your PC": click More info -> Run anyway.',
   '   (Or, before extracting, right-click the zip -> Properties -> tick Unblock -> OK.)',
-  '4. In ENGRAM open BRIDGE -> DETECT to link your Claude accounts.',
+  '4. ENGRAM finds this laptop\'s Claude accounts by itself on first run.',
+  '',
+  'THUMB DRIVE: put this whole ENGRAM folder on the drive and run ENGRAM.exe from there on',
+  'each laptop. Each laptop adds its history to ENGRAM-data and sees the others\'.',
+  'Close ENGRAM before unplugging. Claude Code itself still has to be installed on each laptop.',
+  '',
+  'NAS: rename engram.config.example.json to engram.config.json and put your NAS path in it',
+  '(e.g. \\\\NAS\\engram). ENGRAM then syncs there automatically. Do this on each laptop.',
   '',
   'Everything ENGRAM stores lives in ENGRAM-data\\ next to the exe. Nothing is installed,',
   'nothing is written to the registry. To remove it, delete the folder.',

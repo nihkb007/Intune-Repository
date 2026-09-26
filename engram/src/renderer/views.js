@@ -685,16 +685,24 @@ function drawLink(box) {
   const localProjects = m.projects.filter((p) => p.localPath);
   const shared = st.projects ? localProjects.filter((p) => st.projects.includes(p.key)).length : localProjects.length;
   const tools = st.folder ? `<button class="btn small yel" id="lk-now">${icon('sync')}SYNC NOW</button>` : '';
+  const seenAgo = (t) => (t ? ago(t) : 'never');
+  // Portable copy (e.g. on a thumb drive): the vault itself travels between laptops.
+  const drive = st.portable ? `
+      <div class="insight" style="--c:var(--green);margin-bottom:14px">${icon('folder')}<div><b>Portable drive mode: no setup needed</b>
+        <p>This copy of ENGRAM keeps everything in its own <span class="mono">ENGRAM-data</span> folder. Every laptop you run it on adds its sessions and history there, and sees the other laptops' history.</p>
+        <p style="margin-top:6px">${(st.driveLaptops || []).length ? `Also used on: ${st.driveLaptops.map((x) => `<b>${esc(x.name)}</b> (last ${seenAgo(x.lastSeen)})`).join(', ')}` : 'Only this laptop so far. Run it from the drive on your other laptop to add that one.'}</p></div></div>
+      <div class="set-row"><div><b>This laptop</b><small>How this laptop is labelled in the shared history.</small></div><input class="input" id="lk-name" style="width:220px" value="${esc(st.machine?.name || '')}" /></div>` : '';
   if (!st.folder) {
-    box.innerHTML = `${panelHead('03', 'LAPTOP LINK')}
-      <p style="margin-top:0">Share your history, sessions, vault and capsules with your <b>other laptop</b>. Pick a folder that <b>both</b> laptops can reach, such as a OneDrive, Dropbox or Google Drive folder, a Syncthing folder or a network share. Then pick the <b>same</b> folder in ENGRAM on the other laptop.</p>
+    box.innerHTML = `${panelHead('03', 'LAPTOP LINK')}${drive}
+      ${st.portable ? '<h4 style="font:700 10px var(--f-display);letter-spacing:.25em;color:var(--muted);margin:18px 0 8px">OPTIONAL: ALSO SYNC THROUGH A NAS OR CLOUD FOLDER</h4>' : ''}
+      <p style="margin-top:0">Share your history, sessions, vault and capsules with your <b>other laptop</b>. Pick a folder that <b>both</b> laptops can reach, such as a <b>NAS share</b> (for example <span class="mono">\\\\NAS\\engram</span>), a OneDrive, Dropbox or Google Drive folder, or a Syncthing folder. Then pick the <b>same</b> folder in ENGRAM on the other laptop.</p>
       <p class="muted" style="font-size:13px">Each laptop only writes its own sub-folder. Secrets like API keys, tokens and passwords are masked before anything is written. You choose which projects are shared.</p>
       <button class="btn yel" id="lk-folder">${icon('folder')}CHOOSE SHARED FOLDER</button>`;
   } else {
-    const seen = (t) => (t ? ago(t) : 'never');
+    const seen = seenAgo;
     box.innerHTML = `${panelHead('03', 'LAPTOP LINK', tools)}
       ${st.error ? `<div class="insight" style="--c:var(--red);margin-bottom:12px">${icon('alert')}<div><b>Sync problem</b><p>${esc(st.error)}</p></div></div>` : ''}
-      <div class="set-row"><div><b>This laptop</b><small>Shown as this name on your other laptop.</small></div><input class="input" id="lk-name" style="width:220px" value="${esc(st.machine?.name || '')}" /></div>
+      ${drive || `<div class="set-row"><div><b>This laptop</b><small>Shown as this name on your other laptop.</small></div><input class="input" id="lk-name" style="width:220px" value="${esc(st.machine?.name || '')}" /></div>`}
       <div class="set-row"><div><b>Shared folder</b><small class="mono" style="display:block">${esc(st.folder)}</small></div><button class="btn ghost small" id="lk-folder">${icon('folder')}CHANGE</button><button class="btn danger small" id="lk-off">UNLINK</button></div>
       <div class="set-row"><div><b>What to share</b><small>Full history lets you replay and resume sessions from either laptop. Rules &amp; capsules shares only your vault and capsules.</small></div>
         <select class="select" id="lk-mode" style="width:210px"><option value="full" ${st.mode === 'full' ? 'selected' : ''}>FULL HISTORY</option><option value="memory" ${st.mode === 'memory' ? 'selected' : ''}>RULES &amp; CAPSULES ONLY</option></select></div>
@@ -714,10 +722,11 @@ function drawLink(box) {
     const dir = await call(api.pickFolder);
     if (dir) { await apply({ folder: dir }); toast(dir, 'LAPTOP LINK ON', 'var(--yellow)'); }
   };
+  const nameBox = $(box, '#lk-name');
+  if (nameBox) nameBox.onchange = (e) => apply({ machineName: e.target.value });
   if (!st.folder) return;
   $(box, '#lk-now').onclick = async () => { applySnapshot(await call(api.sync.now)); toast(`${(state.sync.machines || []).length} other laptop(s) · ${state.sync.pushed?.sessions ?? 0} sessions shared`, 'SYNCED', 'var(--yellow)'); rerender(); };
   $(box, '#lk-mode').onchange = (e) => apply({ mode: e.target.value });
-  $(box, '#lk-name').onchange = (e) => apply({ machineName: e.target.value });
   $(box, '#lk-off').onclick = () => modal('UNLINK LAPTOPS', '<p>This laptop stops syncing. Files already in the shared folder stay there, and your vault on this laptop keeps everything it received.</p>', { okLabel: 'UNLINK', onOk: () => apply({ folder: null }) });
   $(box, '#lk-proj').onclick = () => {
     const all = !st.projects;

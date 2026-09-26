@@ -130,37 +130,74 @@ setting only applies to this PowerShell window, so a normal `claude` still uses 
 ENGRAM only writes into your Claude folders when you press **SYNC NOW**, **SYNC MEMORY**,
 **INJECT**, or **RESUME ON**. Everything else is read-only.
 
-## 7. Link your two laptops
+## 7. Use ENGRAM on both laptops
 
-Use this when your work laptop runs your work Claude account and your personal laptop runs
-your personal one. After linking, each laptop shows **both laptops' history**: costs,
-sessions, replays, vault and capsules. You can also pick up a session from one laptop on
-the other.
+Claude Code must be installed and signed in on **each** laptop (your work account on the
+work laptop, your personal account on the personal one). ENGRAM is the part you can
+install once and carry around, or keep in sync.
 
-**You need a folder that both laptops can reach.** For example:
+### Option A: thumb drive (install once, carry it)
 
-- a personal OneDrive, Dropbox or Google Drive folder, signed in on both laptops
-- a Syncthing folder
-- a network share
+1. Extract the portable zip onto the drive, so you have `E:\ENGRAM\ENGRAM.exe`. The drive
+   letter doesn't matter.
+2. Plug the drive into either laptop and run `ENGRAM.exe` from the drive. The first time
+   on each laptop, ENGRAM finds that laptop's Claude account by itself.
+3. Everything is stored on the drive in `ENGRAM\ENGRAM-data`. Each laptop you run it on
+   adds its sessions there, and you see both laptops' history. Sessions from the other
+   laptop are tagged **@ LAPTOP-NAME**.
 
-ENGRAM doesn't care which one you use. It just reads and writes files in that folder.
+Things to know:
 
-> **Check your company's rules first.** A work laptop managed by Intune may block personal
-> sync apps, and your employer may not allow work code or session content on a personal
-> device or in a personal cloud account. ENGRAM masks secrets, and it lets you share only
-> some projects or only your rules and capsules (see below), but whether you're allowed
-> to sync at all is your company's call.
+- **One laptop at a time.** Close ENGRAM before unplugging. If you open it on the second
+  laptop while it's still open on the first, ENGRAM warns you. The warning also appears
+  for a few minutes after the drive was pulled out without closing ENGRAM.
+- ENGRAM only sees a laptop's newest sessions while running on that laptop. For example,
+  sessions from today's work arrive on the drive when you next open ENGRAM on the work
+  laptop.
+- Even if your Windows username is the same on both laptops, ENGRAM keeps them apart
+  (it identifies each computer) and keeps each account's costs separate.
+- **Encrypt the drive** (right-click it → *Turn on BitLocker*), since it holds your
+  session history. Back it up now and then: if the drive is lost, so is the history.
+- Work laptops managed by Intune often **block USB storage**, or only allow encrypted
+  drives. If the drive doesn't open on the work laptop, use Option B.
 
-**Set up**
+### Option B: NAS (both laptops at once, automatic)
 
-1. On laptop 1: **BRIDGE** → scroll to **LAPTOP LINK** → **CHOOSE SHARED FOLDER** → pick a
-   folder such as `C:\Users\<you>\OneDrive\ENGRAM`. Give the laptop a clear name, for
-   example `WORK-LAPTOP`.
-2. On laptop 2: do the same, and pick **the same synced folder**. Name it, for example
-   `PERSONAL-LAPTOP`.
-3. Within about 3 minutes, each laptop lists the other under **OTHER LAPTOPS**. That
-   depends on your sync app having finished copying the files. **SYNC NOW** forces an
-   immediate sync.
+Each laptop runs its own ENGRAM (installed or portable), and both sync automatically to
+a folder on your NAS.
+
+1. On the NAS, create a shared folder, for example `\\NAS\engram`, that both laptops can
+   open in File Explorer.
+2. **Pre-built connection:** in the portable ENGRAM folder, rename
+   `engram.config.example.json` to `engram.config.json` and set your NAS path:
+   ```json
+   { "linkFolder": "\\\\NAS\\engram", "mode": "full" }
+   ```
+   (JSON needs every backslash doubled.) For the installer version, put the same file in
+   `%APPDATA%\ENGRAM\`. From then on ENGRAM links itself when it starts. There's nothing
+   to click.
+   - Alternatively, set a repository variable `ENGRAM_LINK_FOLDER` = `\\NAS\engram` on
+     GitHub (Settings → Secrets and variables → Actions → Variables). Every new portable
+     zip then comes with the connection built in.
+   - Or skip the file and pick the folder once under **BRIDGE → LAPTOP LINK → CHOOSE
+     SHARED FOLDER**.
+3. Each laptop pushes its updates and pulls the other's every 3 minutes (or on **SYNC
+   NOW**). When a laptop can't reach the NAS (away from home without VPN), ENGRAM keeps
+   working and catches up next time.
+
+Don't *run* one portable copy from the NAS on both laptops at once. Install or unzip
+ENGRAM on each laptop and point both at the NAS folder as above.
+
+### Option C: cloud folder
+
+Same as Option B, but with a folder synced by OneDrive, Dropbox, Google Drive or
+Syncthing on both laptops instead of a NAS path.
+
+> **Check your company's rules first.** Your work laptop is managed by Intune, which may
+> block USB drives or personal sync apps, and your employer may not allow work code or
+> session content on a personal device, drive or NAS. ENGRAM masks secrets, and it lets
+> you share only some projects or only your rules and capsules (see below), but whether
+> you're allowed to sync at all is your company's call.
 
 **What you'll see**
 
@@ -219,6 +256,8 @@ sensitive.
 | The launched terminal says `claude` is not recognized | Install Claude Code, or reopen the terminal so PATH updates. |
 | Costs seem high or low | SYSTEM → pricing table. ENGRAM uses API list prices, so on a Pro/Max plan the numbers show *what the usage would cost at API rates*, not what you are billed. |
 | App won't start on a work laptop | Blocked by company policy. See section 4. |
-| Other laptop never appears | Both laptops must pick the *same* synced folder, and the sync app must be running on both. Check that `ENGRAM-sync\machines\` in that folder has two sub-folders. |
+| Other laptop never appears | Both laptops must use the *same* NAS/synced folder (and the sync app must be running on both). Check that `ENGRAM-sync\machines\` in that folder has two sub-folders. On a thumb drive, run ENGRAM from the drive once on each laptop. |
+| "ENGRAM is open on another laptop" | Close it there. If it was unplugged or shut down without closing, wait 3 minutes or choose **Open anyway**. |
+| NAS folder unreachable | Open `\\NAS\engram` in File Explorer to check access, and sign in to the NAS in Windows if asked. ENGRAM retries every 3 minutes. |
 | "Project folder not found on this laptop" | Clone the repo on this laptop, or pick its folder when ENGRAM asks. |
 | Start again from scratch | Close ENGRAM and delete `ENGRAM-data` (portable) or `%APPDATA%\ENGRAM` (installed). Your Claude sessions are not affected. |

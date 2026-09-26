@@ -38,7 +38,11 @@ jobs:
       - run: npm test
       - name: Build installer + portable zip
         run: npm run dist:win
-        env: { CSC_IDENTITY_AUTO_DISCOVERY: 'false' }
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Optional repo variable (Settings -> Secrets and variables -> Actions -> Variables):
+          # e.g. \\NAS\engram. When set, the portable zip ships pre-linked to that folder.
+          ENGRAM_LINK_FOLDER: ${{ vars.ENGRAM_LINK_FOLDER }}
       - name: Checksums
         shell: pwsh
         run: Get-ChildItem dist -File | Where-Object Name -match '\.(exe|zip)$' | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } | Set-Content dist/SHA256SUMS.txt

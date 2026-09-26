@@ -16,6 +16,7 @@ const DEFAULTS = () => ({
   bridgeLedger: {},
   recordings: {},
   tombstones: {},
+  machines: {},
   syncState: { exported: {}, imported: {} },
   settings: {
     monthlyBudget: 200,
@@ -60,8 +61,14 @@ class Store {
   _flush() {
     clearTimeout(this._timer);
     const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
-    fs.renameSync(tmp, this.file);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2));
+      fs.renameSync(tmp, this.file);
+      this.lastError = null;
+    } catch (err) {
+      // e.g. the thumb drive was unplugged: keep everything in memory and retry on next save.
+      this.lastError = err.message;
+    }
   }
 
   static id(prefix = '') {

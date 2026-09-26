@@ -19,6 +19,7 @@ define, and lets you switch between Claude accounts without losing context.
 | **FUSION** | Pick any sessions, from any account, and combine them into one **context capsule**. A capsule holds your directives, what was asked, where each session ended, the key files, commands that worked and errors already hit. You can copy it, export it, or inject it into the project's `CLAUDE.md`. |
 | **BRIDGE** | Multi-account support. You can switch accounts, copy sessions between accounts so `claude --resume <id>` works on either one, sync global directives into every account's `CLAUDE.md`, and open a terminal on any account. |
 | **LAPTOP LINK** | Share everything between laptops through any synced folder (OneDrive, Dropbox, Syncthing, a network share). The other laptop's accounts appear alongside yours. The same repo is recognized by its git remote even when it lives at a different path. Vault and capsules merge both ways. You can bring a session from the other laptop and resume it locally. Secrets are masked, and you choose which projects are shared. |
+| **THUMB DRIVE / NAS** | Run the portable build from a thumb drive, and every laptop you plug it into adds its history to the drive. Or point both laptops at a NAS folder with a one-line `engram.config.json` and they sync automatically. See [docs/WINDOWS.md](docs/WINDOWS.md#7-use-engram-on-both-laptops). |
 | **SYSTEM** | Budget, an editable pricing table, archive on/off, and effect intensity. |
 
 Press **Ctrl+K** to open the command palette from anywhere.

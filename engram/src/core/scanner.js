@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseTranscript, listTranscriptFiles, slugToPath, projectNameFrom } = require('./transcripts');
 const { costOf, modelLabel, DEFAULT_PRICING } = require('./pricing');
-const { gitRemote, codeRoots, findCheckouts } = require('./sync');
+const { gitRemote, codeRoots, findCheckouts, identity } = require('./sync');
 
 const emptyTokens = () => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0 });
 const addTokens = (t, u) => {
@@ -47,6 +47,9 @@ class Scanner {
     if (!this.store.data.settings.autoArchive || !sessionId || f.nested) return;
     const rec = this.store.data.recordings[sessionId];
     if (rec && rec.size === f.size && rec.source === f.file) return;
+    // Transcripts only grow: never replace a more complete recording (e.g. one another
+    // laptop continued) with a shorter copy.
+    if (rec && rec.size > f.size) return;
     fs.mkdirSync(this.archiveDir, { recursive: true });
     const dest = path.join(this.archiveDir, `${sessionId}.jsonl`);
     try {
@@ -59,10 +62,22 @@ class Scanner {
 
   scan() {
     const t0 = Date.now();
-    const { accounts, bridgeLedger } = this.store.data;
+    const { bridgeLedger } = this.store.data;
+    // Only this laptop's Claude folders are scanned. Accounts that belong to another laptop
+    // (the vault can travel on a thumb drive) are seen through their archived recordings.
+    const me = identity(this.store).id;
+    const accounts = this.store.data.accounts.filter((a) => !a.machineId || a.machineId === me);
+    const otherMachine = (accountId) => {
+      const a = this.store.data.accounts.find((x) => x.id === accountId);
+      return a && a.machineId && a.machineId !== me ? (this.store.data.machines?.[a.machineId]?.name || 'other laptop') : null;
+    };
     const pricing = this.pricing();
     const bridgedCopies = new Set(Object.values(bridgeLedger).flatMap((l) => l.copies || []));
     const seenMsg = new Set();
+    // Sessions brought over from another laptop: their original messages stay credited
+    // to the account that ran them there.
+    const imported = new Map(Object.entries(this.store.data.syncState?.imported || {})
+      .filter(([, v]) => v.accountId).map(([sid, v]) => [sid, { keys: new Set(v.keys || []), accountId: v.accountId }]));
     const sessions = new Map();
     const sourceSeen = new Set();
     let files = 0;
@@ -138,7 +153,8 @@ class Scanner {
         seenMsg.add(u.key);
         rec.turns.assistant++;
         const c = costOf(u.usage, u.model, pricing);
-        const acctId = bridgeLedger[id]?.attrib?.[u.key] || accountId;
+        const imp = imported.get(id);
+        const acctId = bridgeLedger[id]?.attrib?.[u.key] || (imp && imp.keys.has(u.key) ? imp.accountId : accountId);
         rec.accountCost[acctId] = (rec.accountCost[acctId] || 0) + c.total;
         rec.cost += c.total;
         rec.saved += c.saved;
@@ -193,13 +209,16 @@ class Scanner {
 
     // Recordings whose original transcript is gone (Claude Code prunes old sessions):
     for (const [sid, rec] of Object.entries(this.store.data.recordings)) {
-      if (sourceSeen.has(sid)) continue;
+      // Also read recordings another laptop archived for a session we have locally: it may
+      // hold that laptop's continuation (duplicated messages are skipped).
+      if (sourceSeen.has(sid) && !otherMachine(rec.accountId)) continue;
       const file = path.join(this.archiveDir, `${sid}.jsonl`);
       let st;
       try { st = fs.statSync(file); } catch { continue; }
-      const f = { file, slug: rec.slug, size: st.size, mtimeMs: st.mtimeMs, nested: false };
+      const machine = otherMachine(rec.accountId);
+      const f = { file, slug: rec.slug, size: st.size, mtimeMs: st.mtimeMs, nested: false, remoteMachine: machine || undefined, projectPath: rec.projectPath };
       const parsed = this._parseFile(f);
-      if (parsed) { files++; ingest(parsed, rec.accountId, f, true); }
+      if (parsed) { files++; ingest(parsed, rec.accountId, f, !machine); }
     }
     this.store.save();
 
@@ -208,7 +227,13 @@ class Scanner {
   }
 
   _aggregate(sessionList, files, ms) {
-    const accounts = [...this.store.data.accounts, ...this.extraSources.map((x) => x.account)];
+    const me = identity(this.store).id;
+    const accounts = [
+      ...this.store.data.accounts.map((a) => (a.machineId && a.machineId !== me
+        ? { ...a, remote: true, machine: this.store.data.machines?.[a.machineId]?.name || 'other laptop', name: `${a.name} @ ${this.store.data.machines?.[a.machineId]?.name || 'other laptop'}` }
+        : a)),
+      ...this.extraSources.map((x) => x.account),
+    ];
     const projects = new Map();
     const daily = new Map();
     const models = new Map();

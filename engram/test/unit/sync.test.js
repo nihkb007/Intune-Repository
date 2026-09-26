@@ -19,7 +19,8 @@ function laptop(name, shared, repoUrl) {
   const repo = path.join(root, 'code', 'app');
   gitRepo(repo, repoUrl);
   const store = new Store(path.join(root, 'vault'));
-  store.data.settings.sync = { folder: shared, machineName: name, codeRoots: [path.join(root, 'code')] };
+  store.machineOverride = { id: `m_${name}`, name };
+  store.data.settings.sync = { folder: shared, codeRoots: [path.join(root, 'code')] };
   const acct = store.upsertAccount({ name: name.toUpperCase(), configDir: path.join(root, '.claude') });
   const scanner = new Scanner({ store, dataDir: path.join(root, 'vault') });
   const cycle = () => {
@@ -75,7 +76,7 @@ test('two laptops see each other\'s sessions, grouped as one project, costs not 
   assert.equal(model.accounts.find((a) => a.id === home.acct.id).cost, 5);
   assert.equal(model.sessions.find((s) => s.id === 'ws1').remote, 'work');
 
-  const exported = fs.readFileSync(path.join(shared, 'ENGRAM-sync', 'machines', work.store.data.settings.sync.machineId, 'sessions', 'ws1.jsonl'), 'utf8');
+  const exported = fs.readFileSync(path.join(shared, 'ENGRAM-sync', 'machines', 'm_work', 'sessions', 'ws1.jsonl'), 'utf8');
   assert.ok(!exported.includes('ghp_abcdef'), 'secrets are masked in synced transcripts');
 });
 
@@ -128,7 +129,7 @@ test('bring a session to the other laptop, continue it there, both laptops agree
   const s = model.sessions.find((q) => q.id === 'x');
   const proj = model.projects.find((p) => p.key === s.projectKey);
 
-  const dest = sync.bringHere(home.store, { file: s.file, sessionId: 'x', remotePath: s.projectPath, localPath: proj.localPath, account: home.acct, machineId: work.store.data.settings.sync.machineId });
+  const dest = sync.bringHere(home.store, { file: s.file, sessionId: 'x', remotePath: s.projectPath, localPath: proj.localPath, account: home.acct, machineId: 'm_work' });
   assert.equal(path.basename(path.dirname(dest)), sync.slugFor(home.repo));
   const first = JSON.parse(fs.readFileSync(dest, 'utf8').split('\n').find((l) => l.includes('"cwd"')));
   assert.equal(first.cwd, home.repo, 'cwd rewritten to this laptop\'s checkout');
@@ -152,7 +153,7 @@ test('bring a session to the other laptop, continue it there, both laptops agree
   fs.appendFileSync(path.join(work.acct.configDir, 'projects', 'w', 'x.jsonl'), transcript({ sessionId: 'x', cwd: work.repo, turns: [{ prompt: 'w2', usage: U(1, 1) }] }).replace(/msg_x_0/g, 'msg_x_w2').replace(/req_0/g, 'req_w2'));
   work.cycle();
   const again = home.cycle().model.sessions.find((q) => q.id === 'x');
-  const remoteFile = path.join(shared, 'ENGRAM-sync', 'machines', work.store.data.settings.sync.machineId, 'sessions', 'x.jsonl');
+  const remoteFile = path.join(shared, 'ENGRAM-sync', 'machines', 'm_work', 'sessions', 'x.jsonl');
   assert.throws(() => sync.bringHere(home.store, { file: remoteFile, sessionId: 'x', remotePath: work.repo, localPath: home.repo, account: home.acct }), /diverged/);
   assert.ok(again);
 });

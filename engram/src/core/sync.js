@@ -123,12 +123,49 @@ function slugFor(projectPath) {
   return projectPath.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
+/**
+ * Who is this laptop? Derived from the computer, never stored in the vault, because the
+ * vault itself may travel between laptops on a thumb drive. Order: in-memory override
+ * (tests), explicit settings id (demo data), then a hash of host + user name.
+ */
 function identity(store) {
   const s = store.data.settings;
   s.sync = s.sync || {};
-  if (!s.sync.machineId) s.sync.machineId = 'm_' + crypto.randomBytes(5).toString('hex');
-  if (!s.sync.machineName) s.sync.machineName = os.hostname() || 'this laptop';
-  return { id: s.sync.machineId, name: s.sync.machineName };
+  let host = 'laptop';
+  let user = '';
+  try { host = os.hostname() || host; user = os.userInfo().username || ''; } catch { /* restricted env */ }
+  const id = store.machineOverride?.id || process.env.ENGRAM_MACHINE_ID || s.sync.machineId || 'm_' + crypto.createHash('sha1').update(`${host.toLowerCase()}|${user.toLowerCase()}`).digest('hex').slice(0, 10);
+  const name = store.data.machines?.[id]?.name || store.machineOverride?.name || s.sync.machineName || host;
+  return { id, name };
+}
+
+/**
+ * Called at startup on every laptop. Registers the laptop, claims accounts from before
+ * laptops were tracked, and links this laptop's Claude accounts the first time it runs.
+ */
+function adoptThisMachine(store, detected = []) {
+  const me = identity(store);
+  const machines = (store.data.machines = store.data.machines || {});
+  const first = !machines[me.id];
+  machines[me.id] = { ...(machines[me.id] || {}), name: machines[me.id]?.name || me.name, platform: process.platform, lastSeen: new Date().toISOString() };
+  for (const a of store.data.accounts) if (!a.machineId) a.machineId = me.id;
+  const mine = store.data.accounts.filter((a) => a.machineId === me.id);
+  if (first && !mine.length) {
+    for (const d of detected) {
+      const a = store.upsertAccount({ ...d });
+      a.machineId = me.id;
+    }
+  }
+  // The active account must be one that exists on this laptop.
+  const local = store.data.accounts.filter((a) => a.machineId === me.id);
+  if (!local.some((a) => a.id === store.data.activeAccountId)) store.data.activeAccountId = local[0]?.id || null;
+  store.save(true);
+  return { me, first, accounts: local };
+}
+
+function localAccounts(store) {
+  const { id } = identity(store);
+  return store.data.accounts.filter((a) => !a.machineId || a.machineId === id);
 }
 
 function syncRoot(folder) {
@@ -160,7 +197,7 @@ function exportMachine(store, model, folder) {
     platform: process.platform,
     pushedAt: new Date().toISOString(),
     mode: cfg.mode || 'full',
-    accounts: store.data.accounts.map((a) => ({ id: a.id, name: a.name, color: a.color, email: a.email })),
+    accounts: localAccounts(store).map((a) => ({ id: a.id, name: a.name, color: a.color, email: a.email })),
     projects: localProjects.filter((p) => share(p.key)).map((p) => ({ key: p.key, name: p.name, path: p.localPath, remote: p.remote })),
   }, null, 2));
 
@@ -290,7 +327,7 @@ function importMachines(store, folder) {
  * Copies a remote session into a local account so `claude --resume <id>` works here.
  * cwd fields are rewritten from the other laptop's project path to localPath.
  */
-function bringHere(store, { file, sessionId, remotePath, localPath, account, machineId }) {
+function bringHere(store, { file, sessionId, remotePath, localPath, account, machineId, sourceAccountId }) {
   if (!localPath || !fs.existsSync(localPath)) throw new Error(`Project folder not found on this laptop: ${localPath || '(none)'}`);
   const text = fs.readFileSync(file, 'utf8');
   const lines = text.split('\n').map((line) => {
@@ -327,9 +364,9 @@ function bringHere(store, { file, sessionId, remotePath, localPath, account, mac
   fs.writeFileSync(dest, lines.join('\n'));
   const state = (store.data.syncState = store.data.syncState || { exported: {}, imported: {} });
   state.imported = state.imported || {};
-  state.imported[sessionId] = { machineId, keys: incomingKeys, at: new Date().toISOString() };
+  state.imported[sessionId] = { machineId, accountId: sourceAccountId || null, keys: incomingKeys, at: new Date().toISOString() };
   store.save(true);
   return dest;
 }
 
-module.exports = { codeRoots, findCheckouts, redact, normalizeRemote, gitRemote, slugFor, identity, exportMachine, importMachines, mergeVault, bringHere, ROOT };
+module.exports = { adoptThisMachine, localAccounts, codeRoots, findCheckouts, redact, normalizeRemote, gitRemote, slugFor, identity, exportMachine, importMachines, mergeVault, bringHere, ROOT };
