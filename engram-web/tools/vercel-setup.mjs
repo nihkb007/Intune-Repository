@@ -45,6 +45,13 @@ if (!org) {
   if (process.env.GITHUB_ENV) fs.appendFileSync(process.env.GITHUB_ENV, `VERCEL_ORG_ID=${org}\n`);
 }
 
+// The Vercel CLI also reads the team itself; report (don't fail) when the token can't.
+if (org.startsWith('team_')) {
+  try { await api('GET', `/v2/teams/${encodeURIComponent(org)}`); } catch (err) {
+    console.log(`- this token can't read team ${org} (${err.message.split(': ')[0]}); deploying without it`);
+  }
+}
+
 let problems = 0;
 try {
   // The site lives in engram-web/ and its build reads ../engram, so files outside the root

@@ -129,8 +129,8 @@ jobs:
           ENGRAM_SESSION_SECRET: ${{ secrets.ENGRAM_SESSION_SECRET }}
       - name: Build and deploy (production)
         if: steps.check.outputs.go == 'true'
+        # Vercel builds it (install/build from engram-web/vercel.json). `vercel pull` and
+        # `vercel build` stop when the token can't read the team itself; `deploy` doesn't.
         run: |
-          npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
-          npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
-          url=$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          url=$(npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN")
           echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
