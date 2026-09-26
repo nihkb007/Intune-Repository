@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { parseTranscript, listTranscriptFiles, slugToPath, projectNameFrom } = require('./transcripts');
 const { costOf, modelLabel, DEFAULT_PRICING } = require('./pricing');
+const { gitRemote, codeRoots, findCheckouts } = require('./sync');
 
 const emptyTokens = () => ({ input: 0, output: 0, cacheWrite: 0, cacheRead: 0 });
 const addTokens = (t, u) => {
@@ -23,6 +24,9 @@ class Scanner {
     this.cache = new Map(); // file -> { size, mtimeMs, parsed }
     this.details = new Map(); // sessionId -> detail
     this.model = null;
+    // Sessions from other laptops (see sync.js): [{ account, files, foreign: {sid: Set(keys)} }]
+    this.extraSources = [];
+    this.checkouts = null; // Map(remote -> local path), refreshed when remote projects need it
   }
 
   pricing() {
@@ -63,7 +67,7 @@ class Scanner {
     const sourceSeen = new Set();
     let files = 0;
 
-    const ingest = (parsed, accountId, f, archived) => {
+    const ingest = (parsed, accountId, f, archived, skip) => {
       const s = parsed.session;
       const id = s.id || path.basename(f.file, '.jsonl');
       const origin = bridgeLedger[id]?.origin;
@@ -74,7 +78,11 @@ class Scanner {
           accountId: origin || accountId,
           file: f.file,
           archived: !!archived,
-          projectPath: s.projectPath || (f.slug ? slugToPath(f.slug) : null),
+          projectPath: f.projectPath || s.projectPath || (f.slug ? slugToPath(f.slug) : null),
+          remote: f.remoteMachine || null,
+          projectKey: f.projectKey || null,
+          gitRemote: f.gitRemote || null,
+          localAccountId: null,
           title: s.title,
           startedAt: s.startedAt,
           endedAt: s.endedAt,
@@ -101,6 +109,13 @@ class Scanner {
         this.details.set(id, { prompts: [], files: {}, commands: [], errors: [], lastAssistantText: '' });
       }
       if (f.nested) rec.subagents++;
+      if (!f.remoteMachine && !f.nested && !rec.localAccountId) {
+        // Present on this laptop (possibly brought over from another one): use the local copy.
+        rec.localAccountId = accountId;
+        rec.file = f.file;
+        rec.archived = !!archived;
+        if (rec.remote) { rec.remote = null; rec.projectPath = s.projectPath || rec.projectPath; rec.projectKey = null; }
+      }
       const d = this.details.get(id);
       if (!f.nested) {
         if (s.title && (!rec.title || rec.title === 'Untitled session')) rec.title = s.title;
@@ -119,7 +134,7 @@ class Scanner {
       d.errors.push(...s.errors);
 
       for (const u of parsed.usageEntries) {
-        if (seenMsg.has(u.key)) continue;
+        if (seenMsg.has(u.key) || (skip && skip.has(u.key))) continue;
         seenMsg.add(u.key);
         rec.turns.assistant++;
         const c = costOf(u.usage, u.model, pricing);
@@ -148,6 +163,17 @@ class Scanner {
       rec.fileCount = Object.keys(d.files).length;
       rec.errorCount = d.errors.length;
     };
+
+    // Other laptops first: a session brought here from another laptop is credited to the
+    // account that ran it there (its "foreign" keys are skipped in re-exports coming back).
+    for (const src of this.extraSources) {
+      for (const f of src.files) {
+        files++;
+        const parsed = this._parseFile(f);
+        if (!parsed) continue;
+        ingest(parsed, src.account.id, { ...f, remoteMachine: src.account.machine }, false, src.foreign[parsed.session.id]);
+      }
+    }
 
     // Originals first, bridged copies after: a message only counts once, and messages that
     // exist solely in a copy were produced on that copy's account.
@@ -182,7 +208,7 @@ class Scanner {
   }
 
   _aggregate(sessionList, files, ms) {
-    const accounts = this.store.data.accounts;
+    const accounts = [...this.store.data.accounts, ...this.extraSources.map((x) => x.account)];
     const projects = new Map();
     const daily = new Map();
     const models = new Map();
@@ -191,7 +217,11 @@ class Scanner {
     const byAccount = {};
 
     for (const s of sessionList) {
-      s.projectName = projectNameFrom(s.projectPath);
+      // The same repo can live at different paths on different laptops: group by git remote.
+      const remoteUrl = s.remote ? (s.gitRemote || null) : gitRemote(s.projectPath);
+      s.gitRemote = remoteUrl;
+      s.projectKey = s.projectKey || (remoteUrl ? `git:${remoteUrl}` : s.projectPath || 'unknown');
+      s.projectName = projectNameFrom(s.projectPath || remoteUrl);
       s.modelMix = Object.fromEntries(Object.entries(s.models).map(([k, v]) => [modelLabel(k), v.cost]));
       s.totalTokens = tokSum(s.tokens);
       s.durationMs = s.startedAt && s.endedAt ? Date.parse(s.endedAt) - Date.parse(s.startedAt) : 0;
@@ -205,13 +235,15 @@ class Scanner {
       ba(s.accountId).tokens += s.totalTokens;
       s.accounts = Object.keys(s.accountCost);
 
-      const pk = s.projectPath || 'unknown';
+      const pk = s.projectKey;
       let p = projects.get(pk);
       if (!p) {
-        p = { key: pk, path: s.projectPath, name: s.projectName, cost: 0, saved: 0, tokens: emptyTokens(), sessions: 0, lastActive: null, firstActive: null, accounts: {}, models: {}, daily: {}, errors: 0, files: new Set() };
+        p = { key: pk, path: s.projectPath, localPath: null, remote: remoteUrl, paths: [], name: s.projectName, cost: 0, saved: 0, tokens: emptyTokens(), sessions: 0, lastActive: null, firstActive: null, accounts: {}, models: {}, daily: {}, errors: 0, files: new Set() };
         projects.set(pk, p);
       }
       p.cost += s.cost;
+      if (s.projectPath && !p.paths.includes(s.projectPath)) p.paths.push(s.projectPath);
+      if (!s.remote && !p.localPath && s.projectPath && fs.existsSync(s.projectPath)) { p.localPath = s.projectPath; p.path = s.projectPath; }
       p.saved += s.saved;
       p.sessions++;
       p.errors += s.errorCount;
@@ -241,6 +273,17 @@ class Scanner {
       delete s.hours;
       delete s.dailyAcct;
       delete s._ctxTs;
+    }
+
+    // Projects only seen on other laptops: look for a local checkout of the same repo.
+    const missing = [...projects.values()].filter((p) => !p.localPath && p.remote);
+    if (missing.length) {
+      const stale = !this.checkouts || (missing.some((p) => !this.checkouts.has(p.remote)) && Date.now() - this._checkoutsAt > 10 * 60000);
+      if (stale) { this.checkouts = findCheckouts(codeRoots(this.store)); this._checkoutsAt = Date.now(); }
+      for (const p of missing) {
+        const local = this.checkouts.get(p.remote);
+        if (local) { p.localPath = local; p.path = local; }
+      }
     }
 
     const now = new Date();

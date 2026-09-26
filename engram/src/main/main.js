@@ -6,6 +6,7 @@ const { Store } = require('../core/store');
 const { Scanner } = require('../core/scanner');
 const { fuse } = require('../core/fusion');
 const bridge = require('../core/bridge');
+const sync = require('../core/sync');
 
 const DEMO = process.argv.includes('--demo') || process.env.ENGRAM_DEMO === '1';
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -24,6 +25,8 @@ let scanner;
 let win;
 let watchers = [];
 let rescanTimer = null;
+let syncTimer = null;
+let syncInfo = { machines: [], error: null, merged: 0, pushed: null };
 
 function boot() {
   if (DEMO && !fs.existsSync(path.join(dataDir, 'engram.json'))) require('../../scripts/make-demo-data').main(demoRoot);
@@ -35,13 +38,48 @@ function boot() {
   }
 }
 
+/** Scan, and when a shared folder is linked: pull other laptops first, push this one after. */
+function cycle() {
+  const folder = store.data.settings.sync?.folder;
+  if (!folder) {
+    scanner.extraSources = [];
+    return scanner.scan();
+  }
+  syncInfo.error = null;
+  try {
+    if (!fs.existsSync(folder)) throw new Error(`Shared folder not reachable: ${folder}`);
+    const imp = sync.importMachines(store, folder);
+    scanner.extraSources = imp.sources;
+    syncInfo.machines = imp.machines;
+    syncInfo.merged = imp.merged;
+  } catch (err) {
+    syncInfo.error = err.message;
+  }
+  const model = scanner.scan();
+  if (!syncInfo.error) {
+    try { syncInfo.pushed = sync.exportMachine(store, model, folder); } catch (err) { syncInfo.error = err.message; }
+  }
+  return model;
+}
+
 function pushModel() {
-  if (win && !win.isDestroyed()) win.webContents.send('model:update', snapshot(scanner.scan()));
+  if (win && !win.isDestroyed()) win.webContents.send('model:update', snapshot(cycle()));
+}
+
+function scheduleSync() {
+  clearInterval(syncTimer);
+  if (store.data.settings.sync?.folder) syncTimer = setInterval(pushModel, 3 * 60000);
+}
+
+function syncStatus() {
+  const me = sync.identity(store);
+  const cfg = store.data.settings.sync;
+  return { ...syncInfo, machine: me, folder: cfg.folder || null, mode: cfg.mode || 'full', projects: Array.isArray(cfg.projects) ? cfg.projects : null, lastPush: cfg.lastPush || null, lastPull: cfg.lastPull || null };
 }
 
 function snapshot(model) {
   const d = store.data;
-  return { model, accounts: d.accounts, activeAccountId: d.activeAccountId, settings: d.settings, capsules: d.capsules, notesCount: d.notes.length };
+  return { model, accounts: d.accounts, activeAccountId: d.activeAccountId, settings: d.settings, capsules: d.capsules, notesCount: d.notes.length, sync: syncStatus() };
 }
 
 function watchAccounts() {
@@ -106,8 +144,8 @@ function globalDirectivesMarkdown() {
 }
 
 function registerIpc() {
-  handle('app:init', () => ({ ...snapshot(scanner.model || scanner.scan()), demo: DEMO, portable: PORTABLE, platform: process.platform, version: app.getVersion(), dataDir }));
-  handle('scan:run', () => snapshot(scanner.scan()));
+  handle('app:init', () => ({ ...snapshot(scanner.model || cycle()), demo: DEMO, portable: PORTABLE, platform: process.platform, version: app.getVersion(), dataDir }));
+  handle('scan:run', () => snapshot(cycle()));
   handle('session:detail', (id) => scanner.detail(id));
   handle('session:replay', (id) => scanner.replay(id));
 
@@ -117,9 +155,12 @@ function registerIpc() {
 
   handle('fusion:create', ({ ids, title }) => {
     const details = ids.map((id) => scanner.detail(id)).filter(Boolean);
-    const projects = new Set(details.map((d) => d.projectPath));
-    const notes = store.data.notes.filter((n) => n.scope === 'global' || projects.has(n.project));
-    const cap = fuse(details, { notes, accounts: store.data.accounts, title });
+    const projs = scanner.model.projects.filter((p) => details.some((d) => d.projectKey === p.key));
+    const keys = new Set(projs.flatMap((p) => [p.key, ...p.paths]));
+    const notes = store.data.notes.filter((n) => n.scope === 'global' || keys.has(n.project));
+    const cap = fuse(details, { notes, accounts: scanner.model.accounts, title });
+    // Inject targets must be folders on this laptop.
+    cap.projects = [...new Set(cap.projects.map((root) => projs.find((p) => p.paths.includes(root))?.localPath || root))];
     return store.addCapsule(cap);
   });
   handle('fusion:inject', ({ id, projectPath }) => {
@@ -165,6 +206,43 @@ function registerIpc() {
   });
 
   handle('settings:update', (patch) => store.updateSettings(patch));
+
+  handle('sync:status', () => syncStatus());
+  handle('sync:update', (patch) => {
+    const cfg = store.data.settings.sync;
+    if ('folder' in patch) cfg.folder = patch.folder || null;
+    if (patch.mode === 'full' || patch.mode === 'memory') cfg.mode = patch.mode;
+    if ('projects' in patch) cfg.projects = Array.isArray(patch.projects) ? patch.projects : null;
+    if (typeof patch.machineName === 'string' && patch.machineName.trim()) cfg.machineName = patch.machineName.trim().slice(0, 40);
+    store.save(true);
+    scheduleSync();
+    return snapshot(cycle());
+  });
+  handle('sync:now', () => snapshot(cycle()));
+  handle('sync:bringHere', ({ sessionId, accountId, localPath }) => {
+    const s = scanner.model.sessions.find((x) => x.id === sessionId);
+    if (!s || !s.remote) throw new Error('That session is already on this laptop.');
+    const proj = scanner.model.projects.find((p) => p.key === s.projectKey);
+    const target = localPath || proj?.localPath;
+    if (!target) return { needFolder: true, project: s.projectName };
+    const acct = accountById(accountId);
+    const src = scanner.extraSources.find((x) => x.files.some((f) => f.file === s.file));
+    sync.bringHere(store, { file: s.file, sessionId, remotePath: s.projectPath, localPath: target, account: acct, machineId: src?.account.machineId });
+    if (localPath && proj?.remote) {
+      // Remember the folder for next time.
+      store.data.settings.sync.codeRoots = [...new Set([...(store.data.settings.sync.codeRoots || []), path.dirname(localPath)])];
+      scanner.checkouts = null;
+    }
+    setTimeout(pushModel, 500);
+    try {
+      return { cmd: bridge.launchTerminal(acct, { projectPath: target, resumeId: sessionId }), path: target };
+    } catch (err) {
+      // The session is here either way; hand over the command if no terminal could open.
+      const cmd = bridge.launchCommand(acct, { projectPath: target, resumeId: sessionId });
+      clipboard.writeText(cmd);
+      return { cmd, path: target, launchError: err.message };
+    }
+  });
   handle('clipboard:write', (text) => { clipboard.writeText(String(text)); return true; });
   handle('shell:openPath', (p) => shell.openPath(p));
   handle('dialog:pickFolder', async () => {
@@ -186,6 +264,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc();
     createWindow();
     watchAccounts();
+    scheduleSync();
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
   });
   app.on('window-all-closed', () => {

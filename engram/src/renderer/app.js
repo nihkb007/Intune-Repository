@@ -34,12 +34,13 @@ export function applySnapshot(s) {
   state.activeAccountId = s.activeAccountId;
   state.settings = s.settings;
   state.capsules = s.capsules;
+  state.sync = s.sync || null;
   document.body.dataset.effects = s.settings.effects || 'full';
   renderAccountSwitch();
   renderRailStat();
 }
 
-export const acct = (id) => state.accounts.find((a) => a.id === id) || { id, name: 'Unknown', color: '#6c7a98' };
+export const acct = (id) => state.accounts.find((a) => a.id === id) || state.model?.accounts.find((a) => a.id === id) || { id, name: 'Unknown', color: '#6c7a98' };
 export const activeAccount = () => acct(state.activeAccountId);
 
 // ---------- toasts / modal ----------

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('engram', {
   bridge: { plan: call('bridge:plan'), sync: call('bridge:sync'), memory: call('bridge:memory') },
   launch: { terminal: call('launch:terminal'), command: call('launch:command') },
   settings: { update: call('settings:update') },
+  sync: { status: call('sync:status'), update: call('sync:update'), now: call('sync:now'), bringHere: call('sync:bringHere') },
   clipboard: call('clipboard:write'),
   openPath: call('shell:openPath'),
   pickFolder: call('dialog:pickFolder'),

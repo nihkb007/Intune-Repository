@@ -107,7 +107,7 @@ const OUTCOMES = [
 
 function writeSession(configDir, project, startTs, opts = {}) {
   const sid = uuid();
-  const slug = project.dir.replace(/[\\/.]/g, '-');
+  const slug = project.dir.replace(/[^a-zA-Z0-9]/g, '-');
   const dir = path.join(configDir, 'projects', slug);
   fs.mkdirSync(dir, { recursive: true });
   const lines = [];
@@ -173,6 +173,15 @@ function main(ROOT = DEFAULT_ROOT) {
   const DATA = path.join(ROOT, 'data');
   seed = 1337;
   fs.rmSync(ROOT, { recursive: true, force: true });
+  const SHARED = path.join(ROOT, 'shared-folder');
+  // Real (empty) checkouts with git remotes, so the laptops can match projects by repo.
+  const checkout = (base, p) => {
+    const dir = path.join(base, 'code', p.name);
+    fs.mkdirSync(path.join(dir, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.git', 'config'), `[remote "origin"]\n\turl = git@github.com:nihko/${p.name}.git\n`);
+    return dir;
+  };
+  for (const p of PROJECTS) p.dir = checkout(HOME, p);
   const acctDirs = { ops: path.join(HOME, '.claude'), personal: path.join(HOME, '.claude-personal') };
   for (const [k, d] of Object.entries(acctDirs)) {
     fs.mkdirSync(d, { recursive: true });
@@ -211,21 +220,50 @@ function main(ROOT = DEFAULT_ROOT) {
     ],
     activeAccountId: 'a_ops',
     notes: [
-      note('n_1', { title: 'Never reassign users in the exceptions group', kind: 'directive', pinned: true, project: '/home/nihko/code/Intune-Repository', tags: ['intune', 'safety'], body: 'Members of **SG-Intune-PrimaryUser-Exempt** must be skipped before any Graph PATCH. The script must log the skip with the device serial.\n\n- Check group membership *before* resolving sign-ins\n- `-WhatIf` must never call Graph write endpoints' }),
-      note('n_2', { title: 'Graph throttling strategy', kind: 'decision', project: '/home/nihko/code/Intune-Repository', tags: ['graph', 'performance'], body: 'We honour `Retry-After` and fall back to exponential backoff (2s → 32s, 5 attempts). Batch requests of 20 max.\n\n```powershell\nInvoke-WithRetry { Invoke-MgGraphRequest @params }\n```' }),
-      note('n_3', { title: 'Money is integer cents', kind: 'directive', pinned: true, project: '/home/nihko/code/neon-storefront', tags: ['payments'], body: 'All prices are stored and computed as integer cents. Only format at the UI edge. This fixed the one-cent discount bug.' }),
-      note('n_4', { title: 'Always shift signals by one bar', kind: 'lesson', project: '/home/nihko/code/quant-signals', tags: ['backtest'], body: 'Any signal computed on close must be `.shift(1)` before joining returns, or the backtest has look-ahead bias (Sharpe 3.9 was fake).' }),
+      note('n_1', { title: 'Never reassign users in the exceptions group', kind: 'directive', pinned: true, project: 'git:github.com/nihko/Intune-Repository'.toLowerCase(), tags: ['intune', 'safety'], body: 'Members of **SG-Intune-PrimaryUser-Exempt** must be skipped before any Graph PATCH. The script must log the skip with the device serial.\n\n- Check group membership *before* resolving sign-ins\n- `-WhatIf` must never call Graph write endpoints' }),
+      note('n_2', { title: 'Graph throttling strategy', kind: 'decision', project: 'git:github.com/nihko/Intune-Repository'.toLowerCase(), tags: ['graph', 'performance'], body: 'We honour `Retry-After` and fall back to exponential backoff (2s → 32s, 5 attempts). Batch requests of 20 max.\n\n```powershell\nInvoke-WithRetry { Invoke-MgGraphRequest @params }\n```' }),
+      note('n_3', { title: 'Money is integer cents', kind: 'directive', pinned: true, project: 'git:github.com/nihko/neon-storefront'.toLowerCase(), tags: ['payments'], body: 'All prices are stored and computed as integer cents. Only format at the UI edge. This fixed the one-cent discount bug.' }),
+      note('n_4', { title: 'Always shift signals by one bar', kind: 'lesson', project: 'git:github.com/nihko/quant-signals'.toLowerCase(), tags: ['backtest'], body: 'Any signal computed on close must be `.shift(1)` before joining returns, or the backtest has look-ahead bias (Sharpe 3.9 was fake).' }),
       note('n_5', { title: 'House style for every project', kind: 'directive', scope: 'global', pinned: true, project: null, tags: ['global'], body: 'Run the test suite before claiming done. Small commits with imperative messages. Never commit secrets or `.env` files.' }),
-      note('n_6', { title: 'Traefik wildcard certs', kind: 'lesson', project: '/home/nihko/code/homelab-infra', tags: ['dns'], body: 'Cloudflare token needs **Zone:Read** on all zones, not just DNS edit — otherwise ACME fails with "failed to find zone".' }),
-      note('n_7', { title: 'Release checklist', kind: 'note', project: '/home/nihko/code/engram', tags: ['release'], body: '1. `npm test`\n2. `npm run test:e2e`\n3. `npm run dist:win`\n4. Tag and push' }),
+      note('n_6', { title: 'Traefik wildcard certs', kind: 'lesson', project: 'git:github.com/nihko/homelab-infra'.toLowerCase(), tags: ['dns'], body: 'Cloudflare token needs **Zone:Read** on all zones, not just DNS edit — otherwise ACME fails with "failed to find zone".' }),
+      note('n_7', { title: 'Release checklist', kind: 'note', project: 'git:github.com/nihko/engram'.toLowerCase(), tags: ['release'], body: '1. `npm test`\n2. `npm run test:e2e`\n3. `npm run dist:win`\n4. Tag and push' }),
     ],
     capsules: [],
     bridgeLedger: {},
     recordings: {},
-    settings: { monthlyBudget: 200, currency: 'USD', pricingOverrides: {}, autoArchive: true, effects: 'full', injectOnFuse: false },
+    settings: { monthlyBudget: 200, currency: 'USD', pricingOverrides: {}, autoArchive: true, effects: 'full', injectOnFuse: false,
+      sync: { folder: SHARED, machineId: 'm_personal', machineName: 'PERSONAL-LAPTOP', mode: 'full' } },
   };
   fs.writeFileSync(path.join(DATA, 'engram.json'), JSON.stringify(store, null, 2));
-  console.log(`demo: ${count} sessions across ${PROJECTS.length} projects and 2 accounts -> ${ROOT}`);
+
+  // A second laptop (the work laptop) with its own Claude account, pushed into the shared
+  // folder by the real sync code, exactly as ENGRAM on that laptop would.
+  const WORK = path.join(ROOT, 'work-laptop');
+  const workAcctDir = path.join(WORK, '.claude');
+  const workProjects = PROJECTS.filter((p) => ['Intune-Repository', 'homelab-infra'].includes(p.name)).map((p) => ({ ...p, dir: checkout(WORK, p) }));
+  let remoteCount = 0;
+  for (let d = 30; d >= 0; d--) {
+    const weekday = new Date(now - d * 86400000).getDay();
+    if (weekday === 0 || weekday === 6) continue;
+    for (let i = 0; i < int(0, 2); i++) {
+      const start = new Date(now - d * 86400000);
+      start.setHours(pick([8, 9, 10, 11, 14, 15, 16]), int(0, 59), 0, 0);
+      if (start.getTime() > now - 3600000) start.setTime(now - int(3, 12) * 3600000);
+      writeSession(workAcctDir, pick(workProjects), start.getTime());
+      remoteCount++;
+    }
+  }
+  const { Store } = require('../src/core/store');
+  const { Scanner } = require('../src/core/scanner');
+  const sync = require('../src/core/sync');
+  const ws = new Store(path.join(WORK, 'vault'));
+  ws.data.settings.sync = { folder: SHARED, machineId: 'm_worklaptop', machineName: 'WORK-LAPTOP', mode: 'full', codeRoots: [path.join(WORK, 'code')] };
+  ws.upsertAccount({ id: 'a_corp', name: 'CORP // work', configDir: workAcctDir, color: '#00f0ff', email: 'nihko@corp.example' });
+  ws.upsertNote({ title: 'Change freeze on Fridays', kind: 'directive', scope: 'global', pinned: true, body: 'No production Intune assignments on Fridays after 12:00. Stage in the pilot ring instead.' });
+  const wsc = new Scanner({ store: ws, dataDir: path.join(WORK, 'vault') });
+  sync.exportMachine(ws, wsc.scan(), SHARED);
+  ws.save(true);
+  console.log(`demo: ${count} sessions on this laptop (2 accounts) + ${remoteCount} on WORK-LAPTOP, ${PROJECTS.length} projects -> ${ROOT}`);
 }
 
 if (require.main === module) main();

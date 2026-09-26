@@ -76,6 +76,26 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await wait(2500);
   await shot('09-bridge-synced');
 
+  // Laptop link: the demo includes a second laptop sharing a folder.
+  const link = await win.textContent('#br-link');
+  assert.ok(link.includes('WORK-LAPTOP'), 'other laptop listed');
+  await win.$eval('#br-link', (n) => n.scrollIntoView());
+  await wait(600);
+  await shot('12-laptop-link');
+
+  // A session recorded on the other laptop: bring it here and resume.
+  await nav('recordings');
+  await win.selectOption('#rc-acct', { label: 'CORP // work @ WORK-LAPTOP' });
+  await wait(400);
+  assert.ok(await win.$$eval('#rc-table tbody tr', (n) => n.length) > 0, 'remote sessions listed');
+  await win.click('#rc-table tbody tr:nth-child(1) td:nth-child(2)');
+  await wait(1500);
+  assert.match(await win.textContent('#rp-resume'), /BRING HERE/);
+  await shot('13-remote-session');
+  await win.click('#rp-resume');
+  await wait(2500);
+  assert.match(await win.textContent('#toasts'), /READY TO RESUME|RESUMED ON/, 'session brought to this laptop');
+
   await nav('settings');
   assert.equal(await win.getAttribute('.credit', 'href'), 'https://butchermedia.cc', 'rail credit links to butchermedia.cc');
   assert.ok(await win.$('.settings-grid a[href="https://butchermedia.cc"]'), 'About links to butchermedia.cc');

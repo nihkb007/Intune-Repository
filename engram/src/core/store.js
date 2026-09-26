@@ -15,6 +15,8 @@ const DEFAULTS = () => ({
   capsules: [],
   bridgeLedger: {},
   recordings: {},
+  tombstones: {},
+  syncState: { exported: {}, imported: {} },
   settings: {
     monthlyBudget: 200,
     currency: 'USD',
@@ -22,6 +24,7 @@ const DEFAULTS = () => ({
     autoArchive: true,
     effects: 'full',
     injectOnFuse: false,
+    sync: {},
   },
 });
 
@@ -38,7 +41,7 @@ class Store {
     try {
       const raw = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       const d = DEFAULTS();
-      return { ...d, ...raw, settings: { ...d.settings, ...(raw.settings || {}) } };
+      return { ...d, ...raw, settings: { ...d.settings, ...(raw.settings || {}), sync: { ...(raw.settings?.sync || {}) } } };
     } catch (err) {
       if (fs.existsSync(this.file)) {
         // Corrupt file: keep a copy rather than silently discarding memory.
@@ -104,6 +107,8 @@ class Store {
   deleteNote(id) {
     const before = this.data.notes.length;
     this.data.notes = this.data.notes.filter((x) => x.id !== id);
+    // Remember the deletion so other laptops drop their copy instead of restoring it.
+    if (before !== this.data.notes.length) this.data.tombstones[id] = new Date().toISOString();
     this.save();
     return before !== this.data.notes.length;
   }
@@ -119,6 +124,7 @@ class Store {
 
   deleteCapsule(id) {
     this.data.capsules = this.data.capsules.filter((x) => x.id !== id);
+    this.data.tombstones[id] = new Date().toISOString();
     this.save();
   }
 

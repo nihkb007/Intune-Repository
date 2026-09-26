@@ -18,8 +18,12 @@ function lastNDays(n) {
 }
 
 function accountSeries() {
-  return state.accounts.map((a) => ({ id: a.id, name: a.name, color: a.color }));
+  // Local accounts always; other laptops' accounts once they have spend.
+  return state.model.accounts.filter((a) => !a.remote || a.cost > 0).map((a) => ({ id: a.id, name: a.name, color: a.color }));
 }
+
+/** Notes belong to a project by key (git remote) or by any folder path it has had. */
+const projectOfNote = (n) => state.model.projects.find((p) => p.key === n.project || (p.paths || []).includes(n.project));
 
 function modelColor(label, allLabels) {
   const i = allLabels.indexOf(label);
@@ -64,7 +68,7 @@ function insights() {
 }
 
 async function fuseProject(key, title) {
-  const ids = state.model.sessions.filter((s) => s.projectPath === key).map((s) => s.id);
+  const ids = state.model.sessions.filter((s) => s.projectKey === key).map((s) => s.id);
   if (!ids.length) return toast('No sessions for that project', 'FUSION', 'var(--red)');
   const cap = await call(api.fusion.create, { ids, title });
   state.capsules.unshift(cap);
@@ -84,6 +88,21 @@ async function copyLaunch(opts = {}) {
   const cmd = await call(api.launch.command, { accountId: opts.accountId || state.activeAccountId, projectPath: opts.projectPath, resumeId: opts.resumeId });
   await call(api.clipboard, cmd);
   toast(cmd, 'COMMAND COPIED', 'var(--green)');
+}
+
+/** Copy a session from another laptop into the active account here, then resume it. */
+async function bringHere(s, localPath) {
+  const a = activeAccount();
+  const r = await call(api.sync.bringHere, { sessionId: s.id, accountId: a.id, localPath });
+  if (r.needFolder) {
+    toast(`Pick the folder where ${r.project} is checked out on this laptop.`, 'WHERE IS THIS PROJECT?', 'var(--yellow)');
+    const dir = await call(api.pickFolder);
+    if (dir) return bringHere(s, dir);
+    return;
+  }
+  if (r.launchError) toast(`Session copied to this laptop. Paste the command (already copied) into a terminal: ${r.cmd}`, 'READY TO RESUME', 'var(--yellow)');
+  else toast(r.cmd, `RESUMED ON ${a.name}`, a.color);
+  setTimeout(() => rescan(true), 900);
 }
 
 // =====================================================================
@@ -140,7 +159,7 @@ function nexus(root) {
 
   const maxP = m.projects[0]?.cost || 1;
   $(root, '#nx-bars').innerHTML = m.projects.slice(0, 6).map((p, i) => {
-    const segs = state.accounts.map((a) => ({ c: a.color, v: p.accounts[a.id] || 0, n: a.name })).filter((x) => x.v > 0);
+    const segs = m.accounts.map((a) => ({ c: a.color, v: p.accounts[a.id] || 0, n: a.name })).filter((x) => x.v > 0);
     return `<div class="bar-row" data-key="${esc(p.key)}" data-label="${esc(p.name)}"><span class="name">${esc(p.name)}</span><span class="track">${segs.map((s) => `<i style="width:${(s.v / maxP) * 100}%;background:${s.c};box-shadow:0 0 8px ${s.c};animation-delay:${i * 80}ms" data-tip="${esc(s.n)}: ${money(s.v)}"></i>`).join('')}</span><span class="val">${money(p.cost)}</span></div>`;
   }).join('') || '<div class="empty">No projects yet</div>';
   $$(root, '.bar-row').forEach((r) => { r.onclick = () => go('project', { key: r.dataset.key, label: r.dataset.label }); });
@@ -177,7 +196,7 @@ function projects(root) {
     const list = m.projects.filter((p) => (p.name + ' ' + p.path).toLowerCase().includes(q)).sort((a, b) =>
       sort === 'recent' ? (b.lastActive || '').localeCompare(a.lastActive || '') : sort === 'sessions' ? b.sessions - a.sessions : sort === 'name' ? a.name.localeCompare(b.name) : b.cost - a.cost);
     $(root, '#pj-cards').innerHTML = list.map((p, i) => {
-      const segs = state.accounts.map((a) => ({ c: a.color, v: p.accounts[a.id] || 0 })).filter((x) => x.v > 0);
+      const segs = m.accounts.map((a) => ({ c: a.color, v: p.accounts[a.id] || 0 })).filter((x) => x.v > 0);
       return `<div class="panel pcard" data-key="${esc(p.key)}" data-label="${esc(p.name)}" style="animation-delay:${i * 40}ms">
         <div class="rank">${String(i + 1).padStart(2, '0')}</div>
         <h4>${esc(p.name)}</h4><div class="path">${esc(p.path || '')}</div>
@@ -195,8 +214,8 @@ async function project(root, { key }) {
   const m = state.model;
   const p = m.projects.find((x) => x.key === key);
   if (!p) { go('projects'); return; }
-  const sessions = m.sessions.filter((s) => s.projectPath === key);
-  const notes = await call(api.notes.list, { project: key });
+  const sessions = m.sessions.filter((s) => s.projectKey === key);
+  const notes = (await call(api.notes.list, {})).filter((n) => n.scope === 'global' || projectOfNote(n)?.key === key);
   const days = lastNDays(45);
   const series = accountSeries();
   const chartDays = days.map((d) => {
@@ -239,6 +258,7 @@ async function project(root, { key }) {
   $(root, '#pd-fuse').onclick = () => fuseProject(key, `${p.name} — project memory capsule`);
   $(root, '#pd-launch').onclick = () => launch({ projectPath: p.path });
   $(root, '#pd-note').onclick = () => go('vault', { new: true, project: key, kind: 'directive' });
+  if (!p.localPath) { $(root, '#pd-launch').disabled = true; $(root, '#pd-open').disabled = true; $(root, '#pd-launch').title = 'Not checked out on this laptop'; }
 }
 
 // =====================================================================
@@ -252,7 +272,7 @@ function recordings(root, params) {
     <div class="toolbar">
       <input class="input grow" id="rc-q" placeholder="Search prompts, titles, branches…" value="${esc(params.q || '')}" />
       <select class="select" id="rc-proj"><option value="">All projects</option>${m.projects.map((p) => `<option value="${esc(p.key)}">${esc(p.name)}</option>`).join('')}</select>
-      <select class="select" id="rc-acct"><option value="">All accounts</option>${state.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>
+      <select class="select" id="rc-acct"><option value="">All accounts</option>${m.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select>
     </div>
     <div class="panel" style="padding:6px 8px 10px"><div class="scroll" style="max-height:calc(100vh - 330px);overflow:auto"><table class="table" id="rc-table"><thead><tr>
       <th style="width:34px"></th><th data-sort="title">SESSION</th><th data-sort="projectName">PROJECT</th><th>ACCOUNT</th><th>MODELS</th><th data-sort="startedAt">STARTED</th><th data-sort="durationMs" class="num">DURATION</th><th data-sort="totalTokens" class="num">TOKENS</th><th data-sort="cost" class="num">COST</th></tr></thead><tbody></tbody></table></div></div>
@@ -263,13 +283,13 @@ function recordings(root, params) {
     const q = $(root, '#rc-q').value.toLowerCase();
     const pj = $(root, '#rc-proj').value;
     const ac = $(root, '#rc-acct').value;
-    const list = m.sessions.filter((s) => (!pj || s.projectPath === pj) && (!ac || s.accounts.includes(ac) || s.accountId === ac)
+    const list = m.sessions.filter((s) => (!pj || s.projectKey === pj) && (!ac || s.accounts.includes(ac) || s.accountId === ac)
       && (!q || (s.title + ' ' + s.projectName + ' ' + (s.gitBranch || '')).toLowerCase().includes(q)))
       .sort((a, b) => { const x = a[sortKey], y = b[sortKey]; return (typeof x === 'number' ? x - y : String(x || '').localeCompare(String(y || ''))) * dir; });
     $$(root, 'th[data-sort]').forEach((th) => th.classList.toggle('sorted', th.dataset.sort === sortKey));
     $(root, '#rc-table tbody').innerHTML = list.slice(0, 500).map((s) => `<tr data-id="${s.id}" data-label="${esc(s.title)}" class="${sel.has(s.id) ? 'sel' : ''}">
       <td><label class="check"><input type="checkbox" data-pick="${s.id}" ${sel.has(s.id) ? 'checked' : ''}/></label></td>
-      <td class="title-cell"><b>${esc(s.title)}</b><small>${esc(s.gitBranch || '')}${s.archived ? ' · <span style="color:var(--yellow)">ARCHIVED</span>' : ''}${s.bridged ? ' · <span style="color:var(--violet)">BRIDGED</span>' : ''}${s.subagents ? ` · ${s.subagents} subagent` : ''}</small></td>
+      <td class="title-cell"><b>${esc(s.title)}</b><small>${esc(s.gitBranch || '')}${s.remote ? ` · <span style="color:var(--green)">@ ${esc(s.remote)}</span>` : ''}${s.archived ? ' · <span style="color:var(--yellow)">ARCHIVED</span>' : ''}${s.bridged ? ' · <span style="color:var(--violet)">BRIDGED</span>' : ''}${s.subagents ? ` · ${s.subagents} subagent` : ''}</small></td>
       <td class="nw">${esc(s.projectName)}</td>
       <td>${s.accounts.map((id) => `<span class="dot" title="${esc(acct(id).name)}" style="--c:${acct(id).color};margin-right:6px"></span>`).join('')}</td>
       <td class="nw">${Object.keys(s.modelMix).map((l) => `<span class="tag ${/Opus/.test(l) ? 'c' : /Fable|Mythos/.test(l) ? 'm' : /Sonnet/.test(l) ? 'v' : 'g'}" style="margin-right:4px">${esc(l)}</span>`).join('')}</td>
@@ -314,7 +334,7 @@ async function replay(root, { id, autoplay = true }) {
 
   root.innerHTML = `
     ${head(`SESSION RECORDING · ${esc(s.projectName)}`, esc(s.title.length > 60 ? s.title.slice(0, 58) + '…' : s.title), `<span class="mono" style="font-size:12px">${esc(s.id)} · ${when(s.startedAt)} · recorded on <b style="color:${a.color}">${esc(a.name)}</b></span>`,
-      `<button class="btn ghost" id="rp-back">${icon('back')}BACK</button><button class="btn ghost" id="rp-copy">${icon('copy')}RESUME CMD</button><button class="btn mag" id="rp-fuse">${icon('fusion')}FUSE</button><button class="btn" id="rp-resume" style="background:${act.color};box-shadow:0 0 14px ${act.color}">${icon('term')}RESUME ON ${esc(act.name)}</button>`)}
+      `<button class="btn ghost" id="rp-back">${icon('back')}BACK</button>${s.remote ? '' : `<button class="btn ghost" id="rp-copy">${icon('copy')}RESUME CMD</button>`}<button class="btn mag" id="rp-fuse">${icon('fusion')}FUSE</button><button class="btn" id="rp-resume" style="background:${act.color};box-shadow:0 0 14px ${act.color}">${icon('term')}${s.remote ? 'BRING HERE &amp; RESUME ON' : 'RESUME ON'} ${esc(act.name)}</button>`)}
     <div class="replay">
       <div class="panel stream">
         <div class="transport">
@@ -413,8 +433,8 @@ async function replay(root, { id, autoplay = true }) {
   $(root, '#rp-end').onclick = () => { playing = false; pos = events.length; rebuild(); };
   $$(root, '#rp-speed button').forEach((b) => { b.onclick = () => { speed = +b.dataset.s; $$(root, '#rp-speed button').forEach((x) => x.classList.toggle('on', x === b)); }; });
   $(root, '#rp-back').onclick = () => history.length && go('recordings');
-  $(root, '#rp-resume').onclick = () => launch({ projectPath: s.projectPath, resumeId: s.id });
-  $(root, '#rp-copy').onclick = () => copyLaunch({ projectPath: s.projectPath, resumeId: s.id });
+  $(root, '#rp-resume').onclick = () => (s.remote ? bringHere(s) : launch({ projectPath: s.projectPath, resumeId: s.id }));
+  if (!s.remote) $(root, '#rp-copy').onclick = () => copyLaunch({ projectPath: s.projectPath, resumeId: s.id });
   $(root, '#rp-fuse').onclick = async () => { const cap = await call(api.fusion.create, { ids: [s.id] }); state.capsules.unshift(cap); go('fusion', { id: cap.id }); };
   update();
   loop();
@@ -445,11 +465,11 @@ async function vault(root, params) {
     const q = $(root, '#vt-q').value.toLowerCase();
     const k = $(root, '#vt-kind').value;
     const pj = $(root, '#vt-proj').value;
-    const list = notes.filter((n) => (!k || n.kind === k) && (!pj || (pj === '__global' ? n.scope === 'global' : n.project === pj))
+    const list = notes.filter((n) => (!k || n.kind === k) && (!pj || (pj === '__global' ? n.scope === 'global' : projectOfNote(n)?.key === pj))
       && (!q || (n.title + ' ' + n.body + ' ' + n.tags.join(' ')).toLowerCase().includes(q)));
     $(root, '#vt-items').innerHTML = list.map((n) => `<div class="note-item kind-${n.kind} ${current && current.id === n.id ? 'active' : ''}" data-id="${n.id}">
       <h5>${n.pinned ? icon('pin') : ''}${esc(n.title)}</h5><p>${esc(n.body.replace(/[#*`>\n]/g, ' ').slice(0, 90))}</p>
-      <div class="tags"><span class="tag ${n.kind === 'directive' ? 'm' : n.kind === 'decision' ? 'c' : n.kind === 'lesson' ? 'y' : 'v'}">${n.kind.toUpperCase()}</span>${n.scope === 'global' ? '<span class="tag g">GLOBAL</span>' : `<span class="tag">${esc((m.projects.find((p) => p.key === n.project) || {}).name || 'unlinked')}</span>`}${n.tags.slice(0, 3).map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}</div></div>`).join('') || '<div class="empty"><h4>EMPTY</h4>No engrams match.</div>';
+      <div class="tags"><span class="tag ${n.kind === 'directive' ? 'm' : n.kind === 'decision' ? 'c' : n.kind === 'lesson' ? 'y' : 'v'}">${n.kind.toUpperCase()}</span>${n.scope === 'global' ? '<span class="tag g">GLOBAL</span>' : `<span class="tag">${esc((projectOfNote(n) || {}).name || 'unlinked')}</span>`}${n.tags.slice(0, 3).map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}</div></div>`).join('') || '<div class="empty"><h4>EMPTY</h4>No engrams match.</div>';
     $$(root, '.note-item').forEach((it) => { it.onclick = () => edit(notes.find((n) => n.id === it.dataset.id)); });
   };
 
@@ -462,7 +482,7 @@ async function vault(root, params) {
       <div class="row">
         <select class="select" id="ed-kind" style="width:150px">${['directive', 'decision', 'lesson', 'note'].map((k) => `<option ${n.kind === k ? 'selected' : ''} value="${k}">${k.toUpperCase()}</option>`).join('')}</select>
         <select class="select" id="ed-scope" style="width:150px"><option value="project" ${n.scope !== 'global' ? 'selected' : ''}>PROJECT</option><option value="global" ${n.scope === 'global' ? 'selected' : ''}>GLOBAL</option></select>
-        <select class="select" id="ed-proj" style="width:210px">${projOpts(n.project)}</select>
+        <select class="select" id="ed-proj" style="width:210px">${projOpts(projectOfNote(n)?.key || n.project)}</select>
         <input class="input" id="ed-tags" style="flex:1;min-width:160px" placeholder="tags, comma separated" value="${esc(n.tags.join(', '))}" />
         <button class="icon-btn ${n.pinned ? 'on' : ''}" id="ed-pin" title="Pin">${icon('pin')}</button>
         ${n.id ? `<button class="icon-btn" id="ed-del" title="Delete">${icon('trash')}</button>` : ''}
@@ -561,7 +581,7 @@ function fusion(root, params) {
         const src = r.querySelector('#nc-src').value;
         if (src === 'pick') { go('recordings'); toast('Tick sessions, then FUSE INTO CAPSULE.', 'SELECT SESSIONS'); return; }
         const n = +r.querySelector('#nc-n').value || 10;
-        const pool = src === 'proj' ? m.sessions.filter((s) => s.projectPath === r.querySelector('#nc-proj').value) : m.sessions;
+        const pool = src === 'proj' ? m.sessions.filter((s) => s.projectKey === r.querySelector('#nc-proj').value) : m.sessions;
         const cap = await call(api.fusion.create, { ids: pool.slice(0, n).map((s) => s.id), title: r.querySelector('#nc-title').value || undefined });
         state.capsules.unshift(cap);
         go('fusion', { id: cap.id });
@@ -577,9 +597,19 @@ function fusion(root, params) {
 // =====================================================================
 function bridgeView(root, params) {
   const m = state.model;
-  const accts = m.accounts;
-  const W = 900, H = 220;
-  const nodes = accts.map((a, i) => ({ ...a, x: i % 2 === 0 ? 150 : W - 150, y: accts.length <= 2 ? H / 2 : 50 + Math.floor(i / 2) * 110 }));
+  const accts = m.accounts.filter((a) => !a.remote);
+  const remotes = m.accounts.filter((a) => a.remote);
+  const W = 900;
+  let nodes;
+  let H = 220;
+  if (remotes.length) {
+    // This laptop's accounts on the left, other laptops' accounts on the right.
+    H = Math.max(220, 110 * Math.max(accts.length, remotes.length) + 20);
+    const col = (list, x) => list.map((a, i) => ({ ...a, x, y: (H / (list.length + 1)) * (i + 1) }));
+    nodes = [...col(accts, 150), ...col(remotes, W - 150)];
+  } else {
+    nodes = accts.map((a, i) => ({ ...a, x: i % 2 === 0 ? 150 : W - 150, y: accts.length <= 2 ? H / 2 : 50 + Math.floor(i / 2) * 110 }));
+  }
 
   root.innerHTML = `
     ${head('MULTI-ACCOUNT CONTEXT BRIDGE', 'BRIDGE', 'Switch Claude accounts without losing context. Sessions mirror across accounts so any of them can resume any conversation, and global directives sync into each account\'s memory.',
@@ -591,7 +621,7 @@ function bridgeView(root, params) {
         <circle cx="${W / 2}" cy="${H / 2}" r="70" fill="url(#core-g)"><animate attributeName="r" values="62;74;62" dur="3s" repeatCount="indefinite"/></circle>
         <g transform="translate(${W / 2 - 22},${H / 2 - 22}) scale(1.4)" style="color:#e6f1ff;filter:drop-shadow(0 0 8px #00f0ff)"><use href="#i-engram" width="32" height="32"/></g>
         <text x="${W / 2}" y="${H / 2 + 50}" text-anchor="middle" style="font:700 10px Orbitron;letter-spacing:4px;fill:#a9b8d6">SHARED MEMORY</text>
-        ${nodes.map((n) => `<g transform="translate(${n.x},${n.y})"><polygon points="0,-30 26,-15 26,15 0,30 -26,15 -26,-15" fill="#05060b" stroke="${n.color}" stroke-width="2" style="filter:drop-shadow(0 0 10px ${n.color})"/><text y="5" text-anchor="middle" style="font:900 15px Orbitron;fill:${n.color}">${esc(n.name[0] || '?')}</text><text y="50" text-anchor="middle" style="font:700 11px Orbitron;letter-spacing:2px;fill:#e6f1ff">${esc(n.name.toUpperCase())}</text><text y="66" text-anchor="middle" style="font:11px 'JetBrains Mono';fill:#6c7a98">${money(n.cost)} · ${n.sessions} sessions</text></g>`).join('')}
+        ${nodes.map((n) => `<g transform="translate(${n.x},${n.y})"><polygon points="0,-30 26,-15 26,15 0,30 -26,15 -26,-15" fill="#05060b" stroke="${n.color}" stroke-width="2" style="filter:drop-shadow(0 0 10px ${n.color})"/><text y="5" text-anchor="middle" style="font:900 15px Orbitron;fill:${n.color}">${esc(n.name[0] || '?')}</text><text y="50" text-anchor="middle" style="font:700 11px Orbitron;letter-spacing:2px;fill:#e6f1ff">${esc(n.name.toUpperCase())}</text><text y="66" text-anchor="middle" style="font:11px 'JetBrains Mono';fill:#6c7a98">${money(n.cost)} · ${n.sessions} sessions${n.remote ? ' · other laptop' : ''}</text></g>`).join('')}
       </svg>
     </div>
     <div class="accounts">${accts.map((a) => `
@@ -609,7 +639,9 @@ function bridgeView(root, params) {
         <p class="muted" style="margin-top:0">Writes your <b>global</b> pinned directives from the VAULT into each account's user-level <span class="mono">CLAUDE.md</span> (inside an ENGRAM block). Whatever account you sign into, Claude starts with the same rules.</p>
         <div class="cmd"><span id="br-cmd">…</span><button class="icon-btn" id="br-cmd-copy">${icon('copy')}</button></div>
         <p class="muted" style="font-size:12px">Launch command for the active account.</p></div>
-    </div>`;
+    </div>
+    <div class="panel" id="br-link" style="margin-top:18px;--pc:var(--yellow)"></div>`;
+  drawLink($(root, '#br-link'));
 
   call(api.launch.command, {}).then((c) => { $(root, '#br-cmd').textContent = c; }).catch(() => {});
   $(root, '#br-cmd-copy').onclick = () => copyLaunch();
@@ -644,6 +676,65 @@ function bridgeView(root, params) {
     toast(`${r.filter((x) => x.changed).length} of ${r.length} account memories updated`, 'MEMORY SYNCED', 'var(--green)');
   };
   if (params.autosync) sync(); else $(root, '#br-plan').click();
+}
+
+// ---------- LAPTOP LINK ----------
+function drawLink(box) {
+  const st = state.sync || {};
+  const m = state.model;
+  const localProjects = m.projects.filter((p) => p.localPath);
+  const shared = st.projects ? localProjects.filter((p) => st.projects.includes(p.key)).length : localProjects.length;
+  const tools = st.folder ? `<button class="btn small yel" id="lk-now">${icon('sync')}SYNC NOW</button>` : '';
+  if (!st.folder) {
+    box.innerHTML = `${panelHead('03', 'LAPTOP LINK')}
+      <p style="margin-top:0">Share your history, sessions, vault and capsules with your <b>other laptop</b>. Pick a folder that <b>both</b> laptops can reach, such as a OneDrive, Dropbox or Google Drive folder, a Syncthing folder or a network share. Then pick the <b>same</b> folder in ENGRAM on the other laptop.</p>
+      <p class="muted" style="font-size:13px">Each laptop only writes its own sub-folder. Secrets like API keys, tokens and passwords are masked before anything is written. You choose which projects are shared.</p>
+      <button class="btn yel" id="lk-folder">${icon('folder')}CHOOSE SHARED FOLDER</button>`;
+  } else {
+    const seen = (t) => (t ? ago(t) : 'never');
+    box.innerHTML = `${panelHead('03', 'LAPTOP LINK', tools)}
+      ${st.error ? `<div class="insight" style="--c:var(--red);margin-bottom:12px">${icon('alert')}<div><b>Sync problem</b><p>${esc(st.error)}</p></div></div>` : ''}
+      <div class="set-row"><div><b>This laptop</b><small>Shown as this name on your other laptop.</small></div><input class="input" id="lk-name" style="width:220px" value="${esc(st.machine?.name || '')}" /></div>
+      <div class="set-row"><div><b>Shared folder</b><small class="mono" style="display:block">${esc(st.folder)}</small></div><button class="btn ghost small" id="lk-folder">${icon('folder')}CHANGE</button><button class="btn danger small" id="lk-off">UNLINK</button></div>
+      <div class="set-row"><div><b>What to share</b><small>Full history lets you replay and resume sessions from either laptop. Rules &amp; capsules shares only your vault and capsules.</small></div>
+        <select class="select" id="lk-mode" style="width:210px"><option value="full" ${st.mode === 'full' ? 'selected' : ''}>FULL HISTORY</option><option value="memory" ${st.mode === 'memory' ? 'selected' : ''}>RULES &amp; CAPSULES ONLY</option></select></div>
+      <div class="set-row"><div><b>Projects shared from this laptop</b><small>${st.projects ? `${shared} of ${localProjects.length} selected` : `All ${localProjects.length}, including new ones`}</small></div><button class="btn ghost small" id="lk-proj">CHOOSE</button></div>
+      <div class="set-row"><div><b>Secrets</b><small>API keys, tokens, private keys and passwords are replaced with [REDACTED] in everything that leaves this laptop.</small></div><span class="tag g">MASKED</span></div>
+      <div class="set-row"><div><b>Last sync</b><small>Sent ${seen(st.lastPush)} · received ${seen(st.lastPull)}${st.pushed ? ` · ${st.pushed.sessions} sessions shared` : ''}. Syncs automatically every 3 minutes.</small></div></div>
+      <h4 style="font:700 10px var(--f-display);letter-spacing:.25em;color:var(--muted);margin:18px 0 8px">OTHER LAPTOPS</h4>
+      ${(st.machines || []).length ? st.machines.map((x) => `<div class="recent-row" style="grid-template-columns:10px 1fr auto auto;cursor:default"><span class="dot" style="--c:${x.accounts[0]?.color || 'var(--yellow)'}"></span><span class="t">${esc(x.name)}<small>${esc(x.platform || '')} · ${x.accounts.map((a) => esc(a.name.split(' @ ')[0])).join(', ')} · ${x.projects.length} projects</small></span><span class="tag ${x.mode === 'memory' ? 'v' : 'g'}">${x.mode === 'memory' ? 'RULES ONLY' : `${x.sessions} SESSIONS`}</span><span class="muted mono" style="font-size:12px">seen ${seen(x.pushedAt)}</span></div>`).join('')
+        : '<p class="muted" style="margin:0">No other laptop yet. In ENGRAM on your other laptop, open BRIDGE → LAPTOP LINK and pick this same shared folder.</p>'}`;
+  }
+  const apply = async (patch) => {
+    applySnapshot(await call(api.sync.update, patch));
+    rerender();
+  };
+  const pick = $(box, '#lk-folder');
+  if (pick) pick.onclick = async () => {
+    const dir = await call(api.pickFolder);
+    if (dir) { await apply({ folder: dir }); toast(dir, 'LAPTOP LINK ON', 'var(--yellow)'); }
+  };
+  if (!st.folder) return;
+  $(box, '#lk-now').onclick = async () => { applySnapshot(await call(api.sync.now)); toast(`${(state.sync.machines || []).length} other laptop(s) · ${state.sync.pushed?.sessions ?? 0} sessions shared`, 'SYNCED', 'var(--yellow)'); rerender(); };
+  $(box, '#lk-mode').onchange = (e) => apply({ mode: e.target.value });
+  $(box, '#lk-name').onchange = (e) => apply({ machineName: e.target.value });
+  $(box, '#lk-off').onclick = () => modal('UNLINK LAPTOPS', '<p>This laptop stops syncing. Files already in the shared folder stay there, and your vault on this laptop keeps everything it received.</p>', { okLabel: 'UNLINK', onOk: () => apply({ folder: null }) });
+  $(box, '#lk-proj').onclick = () => {
+    const all = !st.projects;
+    const r = modal('PROJECTS TO SHARE', `<div class="form">
+      <label class="check"><input type="checkbox" id="pp-all" ${all ? 'checked' : ''}/> <span>All projects, including new ones</span></label>
+      <div id="pp-list" class="scroll" style="max-height:320px;overflow:auto;display:grid;gap:8px;padding:6px 2px">${localProjects.map((p) => `<label class="check"><input type="checkbox" data-k="${esc(p.key)}" ${all || st.projects.includes(p.key) ? 'checked' : ''}/> <span>${esc(p.name)} <span class="muted mono" style="font-size:11px">${esc(p.localPath)}</span></span></label>`).join('') || '<span class="muted">No projects on this laptop yet.</span>'}</div>
+      <p class="muted" style="font-size:12px;margin:0">Unticked projects' sessions are removed from the shared folder at the next sync.</p></div>`, {
+      okLabel: 'SAVE', onOk: async (root) => {
+        const keys = [...root.querySelectorAll('[data-k]')].filter((c) => c.checked).map((c) => c.dataset.k);
+        await apply({ projects: root.querySelector('#pp-all').checked ? null : keys });
+      },
+    });
+    const allBox = r.querySelector('#pp-all');
+    const sync = () => r.querySelectorAll('[data-k]').forEach((c) => { c.disabled = allBox.checked; if (allBox.checked) c.checked = true; });
+    allBox.onchange = sync;
+    sync();
+  };
 }
 
 function accountForm(a) {

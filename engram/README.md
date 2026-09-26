@@ -18,6 +18,7 @@ define, and lets you switch between Claude accounts without losing context.
 | **VAULT** | Markdown *directives*, *decisions*, *lessons* and *notes*, each scoped to one project or global. |
 | **FUSION** | Pick any sessions, from any account, and combine them into one **context capsule**. A capsule holds your directives, what was asked, where each session ended, the key files, commands that worked and errors already hit. You can copy it, export it, or inject it into the project's `CLAUDE.md`. |
 | **BRIDGE** | Multi-account support. You can switch accounts, copy sessions between accounts so `claude --resume <id>` works on either one, sync global directives into every account's `CLAUDE.md`, and open a terminal on any account. |
+| **LAPTOP LINK** | Share everything between laptops through any synced folder (OneDrive, Dropbox, Syncthing, a network share). The other laptop's accounts appear alongside yours. The same repo is recognized by its git remote even when it lives at a different path. Vault and capsules merge both ways. You can bring a session from the other laptop and resume it locally. Secrets are masked, and you choose which projects are shared. |
 | **SYSTEM** | Budget, an editable pricing table, archive on/off, and effect intensity. |
 
 Press **Ctrl+K** to open the command palette from anywhere.
@@ -112,6 +113,7 @@ All screenshots use generated demo data.
 | ![Replay](docs/screenshots/05-replay.png) | ![Fusion](docs/screenshots/06-fusion.png) |
 | ![Vault](docs/screenshots/07-vault.png) | ![Bridge](docs/screenshots/08-bridge.png) |
 | ![System](docs/screenshots/10-system.png) | ![Palette](docs/screenshots/11-command-palette.png) |
+| ![Laptop link](docs/screenshots/12-laptop-link.png) | ![Session from the other laptop](docs/screenshots/13-remote-session.png) |
 
 ---
 
