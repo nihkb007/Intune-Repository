@@ -24,7 +24,6 @@ GitHub: https://github.com/nihkb007/Intune-Repository
 - **Every variant shows up as a theme** in *Settings → Personalization → Themes*, so you can switch accents with one click.
 - **Automatic backup**: your current setup is saved before any change. `Uninstall.cmd` restores it exactly.
 - **No admin rights needed.** Everything is installed for the current user only.
-- **Can be deployed with Intune** (see below)
 
 ---
 
@@ -46,7 +45,7 @@ GitHub: https://github.com/nihkb007/Intune-Repository
 # Pick everything up front
 .\Install.cmd -Accent Toxic -Wallpaper Flux -TaskbarLeft -RestartExplorer
 
-# Fully unattended
+# No prompts
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-NeonNexus.ps1 -Accent Cyan -Wallpaper Slideshow -Silent
 ```
 
@@ -58,7 +57,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Install-NeonNexus.ps1 
 | `-SkipTerminal`    | switch                                   | off       | Don't add the Windows Terminal scheme/profile |
 | `-SkipLockScreen`  | switch                                   | off       | Leave the lock screen alone |
 | `-RestartExplorer` | switch                                   | off       | Restart Explorer so the taskbar picks up the new color right away |
-| `-Silent`          | switch                                   | off       | No banner and no prompts (for Intune/RMM) |
+| `-Silent`          | switch                                   | off       | Skip the banner and prompts |
 
 ## Uninstall
 
@@ -79,7 +78,7 @@ This restores every registry value from the backup (and removes any value that d
 | Theme files + wallpapers | `%LOCALAPPDATA%\Microsoft\Windows\Themes\NeonNexus` |
 | Backup + log | `%LOCALAPPDATA%\NeonNexus\backup.json`, `install.log` |
 | Terminal fragment | `%LOCALAPPDATA%\Microsoft\Windows Terminal\Fragments\NeonNexus` |
-| Install marker (used for detection) | `HKCU\Software\NeonNexus` |
+| Install marker | `HKCU\Software\NeonNexus` |
 
 Registry values changed (all backed up first):
 
@@ -88,23 +87,6 @@ Registry values changed (all backed up first):
 - `HKCU\...\Explorer\Accent`: `AccentPalette`, `AccentColorMenu`, `StartColorMenu`
 - `HKCU\Control Panel\Desktop`: `WallPaper`, `WallpaperStyle`, `TileWallpaper`, `AutoColorization`
 - `HKCU\...\Explorer\Advanced`: `TaskbarAl` (only with `-TaskbarLeft`)
-
----
-
-## Deploy with Intune (Win32 App)
-
-1. Package the `NeonNexus` folder with the [Microsoft Win32 Content Prep Tool](https://github.com/microsoft/Microsoft-Win32-Content-Prep-Tool):
-   ```
-   IntuneWinAppUtil.exe -c .\NeonNexus -s Install-NeonNexus.ps1 -o .\out
-   ```
-2. Create a **Windows app (Win32)** with:
-   - **Install command**: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File Install-NeonNexus.ps1 -Accent Cyan -Wallpaper Horizon -Silent`
-   - **Uninstall command**: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File Uninstall-NeonNexus.ps1 -Silent`
-   - **Install behavior**: **User**. This matters because the theme is installed per user.
-   - **Detection rule**: custom script → `Intune\Detect-NeonNexus.ps1`
-3. Assign it to users as *Available* (Company Portal) or *Required*.
-
-> Organizations that enforce wallpaper, lock screen or color settings through Intune policy will override those parts. The installer logs a warning for each setting it can't change and carries on with the rest.
 
 ---
 
@@ -128,7 +110,7 @@ Edit the `ACCENTS` table in `Tools/generate_wallpapers.py` (and the matching `$A
 |---------|-----|
 | Taskbar still shows the old color | Re-run with `-RestartExplorer`, or sign out and back in |
 | "Running scripts is disabled" | Use `Install.cmd`. It bypasses the execution policy for this one run only |
-| Lock screen didn't change | It's probably controlled by a policy (GPO/Intune), or you launched the installer with PowerShell 7. Use `Install.cmd` |
+| Lock screen didn't change | A work/school policy may be locking it, or you launched the installer with PowerShell 7. Use `Install.cmd` |
 | Terminal profile missing | Update Windows Terminal (fragments need 1.11+), then restart it |
 
 Built for Windows 11 22H2 and later. Windows 10 mostly works, but the Windows 11 look (rounded corners, Mica) won't apply.

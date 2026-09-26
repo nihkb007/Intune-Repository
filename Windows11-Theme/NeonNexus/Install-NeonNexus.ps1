@@ -18,7 +18,7 @@
 # Usage:
 #   Double-click Install.cmd                     (interactive picker)
 #   .\Install-NeonNexus.ps1 -Accent Toxic -Wallpaper Flux
-#   .\Install-NeonNexus.ps1 -Accent Cyan -Silent (unattended / Intune)
+#   .\Install-NeonNexus.ps1 -Accent Cyan -Silent (no prompts)
 #
 # =====================================================================================
 [CmdletBinding()]
@@ -445,7 +445,7 @@ if (-not $SkipTerminal) {
     catch { Write-Log "Windows Terminal fragment skipped: $($_.Exception.Message)" 'WARN' }
 }
 
-# 8. Marker for detection / uninstall ----------------------------------------
+# 8. Install marker ------------------------------------------------------------
 Set-RegValue $MarkerKey 'Version'     $ThemeVersion 'String'
 Set-RegValue $MarkerKey 'Accent'      $Accent 'String'
 Set-RegValue $MarkerKey 'Wallpaper'   $Wallpaper 'String'
