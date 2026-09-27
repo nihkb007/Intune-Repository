@@ -4,6 +4,7 @@
 //   with a session secret generated at that moment. Making it needs the deployment's setup code
 //   (ENGRAM_SETUP_CODE, which only the Vercel project owner can see), so a stranger who finds
 //   the address first can't claim the site.
+// - Only when ENGRAM_ACCOUNT=on; without it the portal has no account (presets on the drive).
 // - ENGRAM_USERS / ENGRAM_SESSION_SECRET still work and take precedence.
 const { parseUsers, hashPassword, sameText } = require('./auth');
 const { createStore } = require('./store');
@@ -33,7 +34,9 @@ async function loadAuth(env = process.env, store = createStore(env)) {
     misconfigured: users.size > 0 && !ok,
     // First run with storage connected: nobody can sign in yet, so the site offers to make
     // the account. Without storage there's no account: presets live on the drive.
-    setupOpen: users.size === 0 && store.kind !== 'none' && !storeError,
+    // Off unless the owner opts in (ENGRAM_ACCOUNT=on), so connected storage alone never
+    // turns the drive-only portal into a sign-up page.
+    setupOpen: env.ENGRAM_ACCOUNT === 'on' && users.size === 0 && store.kind !== 'none' && !storeError,
     hasSetupCode: normCode(env.ENGRAM_SETUP_CODE).length >= 8,
   };
 }

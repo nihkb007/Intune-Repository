@@ -19,7 +19,7 @@ const W = { 'x-engram': '1' };
 test.before(async () => {
   users = `nihko:${await auth.hashPassword('correct horse battery')},other:${await auth.hashPassword('another long password')}`;
 });
-const withEnv = (env) => { for (const k of ['ENGRAM_USERS', 'ENGRAM_SESSION_SECRET', 'ENGRAM_STORE', 'ENGRAM_SETUP_CODE', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) delete process.env[k]; Object.assign(process.env, env); };
+const withEnv = (env) => { for (const k of ['ENGRAM_USERS', 'ENGRAM_SESSION_SECRET', 'ENGRAM_STORE', 'ENGRAM_SETUP_CODE', 'ENGRAM_ACCOUNT', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) delete process.env[k]; Object.assign(process.env, env); };
 const resetMemory = () => require('../lib/store')._memory.clear();
 
 test('without login configured the portal runs open and keeps presets in the browser', async () => {
@@ -51,12 +51,14 @@ test('first run: the account is made on the site with the setup code, once', asy
   resetMemory();
   const make = (body, ip = '3.3.3.1') => call('setup', { method: 'POST', body, headers: W, ip });
   const good = { username: 'Nihko', password: 'correct horse battery', code: 'abcd-efgh-2345-wxyz' };
-  withEnv({ ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
+  withEnv({ ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
+  assert.equal((await call('me')).json.setup, null, 'storage alone does not open the sign-up page');
+  withEnv({ ENGRAM_ACCOUNT: 'on', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
   assert.equal((await make(good)).status, 503, 'needs storage');
-  withEnv({ ENGRAM_STORE: 'memory' });
+  withEnv({ ENGRAM_ACCOUNT: 'on', ENGRAM_STORE: 'memory' });
   assert.deepEqual((await call('me')).json.setup, { code: false });
   assert.equal((await make(good)).status, 503, 'needs a setup code');
-  withEnv({ ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
+  withEnv({ ENGRAM_ACCOUNT: 'on', ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
   assert.deepEqual((await call('me')).json.setup, { code: true });
   assert.equal((await call('setup', { method: 'POST', body: good, ip: '3.3.3.1' })).status, 403, 'cross-site posts refused');
   assert.equal((await make({ ...good, code: 'WRONG-CODE-0000' })).status, 403);

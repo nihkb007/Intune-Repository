@@ -28,8 +28,9 @@ command under SETUP.
 
 ## Optional: an account (needs paid-or-free Redis storage)
 
-Only if you want presets kept on the server instead of the drive. Once Upstash Redis storage
-is connected to the Vercel project, the site opens on a setup page with three steps (it links to the right Vercel pages):
+Only if you want presets kept on the server instead of the drive. Connect Upstash Redis
+storage to the Vercel project and add the environment variable `ENGRAM_ACCOUNT=on`; the site
+then opens on a setup page with three steps (it links to the right Vercel pages):
 
 1. **Connect storage:** Vercel → Storage → Create Database → *Upstash for Redis* (free) →
    connect it to the project → redeploy. Your account and presets live there.

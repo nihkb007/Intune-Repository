@@ -17,7 +17,7 @@ const exe = process.env.CHROMIUM_PATH || ['/opt/pw-browsers/chromium-1194/chrome
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A fresh deployment: storage connected, setup code set, no account yet.
-Object.assign(process.env, { ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'E2E1-SETU-PCOD-E234' });
+Object.assign(process.env, { ENGRAM_ACCOUNT: 'on', ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'E2E1-SETU-PCOD-E234' });
 const server = await serve(0);
 const url = `http://localhost:${server.address().port}/`;
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
