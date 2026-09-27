@@ -68,6 +68,20 @@ for (const sh of shells) {
   });
 }
 
+for (const sh of shells) {
+  test(`setup checks free space before copying (${sh})`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-ps-space-'));
+    const claude = path.join(root, 'laptop', '.claude');
+    fs.mkdirSync(path.join(claude, 'projects', 'E--code-app'), { recursive: true });
+    fs.writeFileSync(path.join(claude, 'projects', 'E--code-app', 's1.jsonl'), '{"a":1}\n');
+    // Pretend the drive is almost full: Get-Volume reports 1 byte free.
+    const fake = 'function Get-Volume { [pscustomobject]@{ SizeRemaining = 1; FileSystem = "NTFS" } }';
+    const out = run(sh, `${fake}\n${setupScript(path.join(root, 'drive', 'claude-sessions'), { claudeDir: claude })}`);
+    assert.match(out, /Not enough space on [A-Z]: 0\.0 GB needed, 0\.0 GB free/);
+    assert.ok(!fs.lstatSync(path.join(claude, 'projects')).isSymbolicLink(), 'nothing changed');
+  });
+}
+
 test('windows setup test ran or was skipped off Windows', () => {
   assert.ok(process.platform !== 'win32' || shells.length > 0, 'expected PowerShell on Windows');
 });

@@ -24,6 +24,13 @@ function setupScript(target, { claudeDir = null } = {}) {
     'if ($item -and $item.LinkType) { Write-Host "Already set up: $p -> $($item.Target)" -ForegroundColor Green }',
     'else {',
     '  if ($item) {',
+    // Room check first: "not enough space" (robocopy error 112) otherwise shows up mid-copy.
+    '    $files = Get-ChildItem -LiteralPath $p -Recurse -File -Force -ErrorAction SilentlyContinue',
+    '    $need = ($files | Measure-Object Length -Sum).Sum; if (-not $need) { $need = 0 }',
+    '    $vol = try { Get-Volume -DriveLetter (Split-Path $drive -Qualifier).TrimEnd(":") -ErrorAction Stop } catch { $null }',
+    '    if ($vol -and $vol.SizeRemaining -lt $need) { Write-Host ("Not enough space on {0} {1:N1} GB needed, {2:N1} GB free. Free up space or use a bigger drive, then run this again. Nothing was changed." -f (Split-Path $drive -Qualifier), ($need/1GB), ($vol.SizeRemaining/1GB)) -ForegroundColor Red; return }',
+    '    $big = $files | Where-Object { $_.Length -ge 4GB } | Select-Object -First 1',
+    '    if ($vol -and $vol.FileSystem -eq "FAT32" -and $big) { Write-Host ("{0} is FAT32, which cannot hold files over 4 GB ({1}). Reformat the drive as exFAT (copy your files off first), then run this again. Nothing was changed." -f (Split-Path $drive -Qualifier), $big.Name) -ForegroundColor Red; return }',
     // /COPY:DT /FFT: data + times only, 2-second time tolerance, so exFAT/FAT32 drives work
     '    $out = robocopy $p $drive /E /XO /XJ /FFT /COPY:DT /R:2 /W:2 /NFL /NDL /NJH /NJS /NP',
     '    if ($LASTEXITCODE -ge 8) {',
