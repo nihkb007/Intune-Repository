@@ -1,22 +1,23 @@
 # ENGRAM Web: portal
 
-The ENGRAM command center as a website you sign in to:
+The ENGRAM command center as a website:
 - Claude Code costs, session replays, the notes vault and fusion capsules
-- **presets**, one per laptop: which drive and folder, which account, what to open first,
-  including **resume my last session**
+- **presets**, one per laptop: which account, what to open first, including **resume my last
+  session**
 
-Your Claude sessions stay on your external drive and are read only by the browser tab. The
-server stores only your presets.
+No account and no database needed: your Claude sessions stay on your external drive and are
+read only by the browser tab, and presets are saved on the drive
+(`claude-sessions\.engram\presets.json`), so both laptops see them. Nothing is uploaded.
 
-| First visit | Presets | Resume |
+| Open the drive | Presets | Resume |
 | --- | --- | --- |
-| ![First visit](docs/web-00-first-run.png) | ![Presets](docs/web-03-presets.png) | ![Resume](docs/web-04-resume.png) |
+| ![Open the drive](docs/web-00-open-drive.png) | ![Presets](docs/web-03-presets.png) | ![Resume](docs/web-04-resume.png) |
 
 ## Everyday use
 
-1. Open the portal and sign in (the first time: make your account, below).
-2. Pick a preset (e.g. **WORK LAPTOP**). The first time on each laptop, point it to
-   `E:\claude-sessions` once. After that it remembers.
+1. Open the portal and click **OPEN YOUR DRIVE** (the first time on each laptop, choose
+   `E:\` or `E:\claude-sessions`; after that it remembers).
+2. Pick a preset (e.g. **WORK LAPTOP**).
 3. You land where the preset says. With **Latest session (resume)**, click **COPY RESUME
    COMMAND** and paste it into a terminal: `Set-Location 'E:\your-project'; claude --resume <id>`.
 
@@ -25,9 +26,10 @@ paste it into PowerShell. It moves that laptop's sessions to the drive and links
 Code to them (a junction, no admin needed). Running it again is harmless. There's an undo
 command under SETUP.
 
-## First visit: make your account on the site
+## Optional: an account (needs paid-or-free Redis storage)
 
-A new deployment opens on a setup page with three steps (it links to the right Vercel pages):
+Only if you want presets kept on the server instead of the drive. Once Upstash Redis storage
+is connected to the Vercel project, the site opens on a setup page with three steps (it links to the right Vercel pages):
 
 1. **Connect storage:** Vercel → Storage → Create Database → *Upstash for Redis* (free) →
    connect it to the project → redeploy. Your account and presets live there.

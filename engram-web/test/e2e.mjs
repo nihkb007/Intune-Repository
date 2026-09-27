@@ -2,7 +2,8 @@
 //  A) portal with login: create the account on the first-run page, create presets, start one (folder = Chromium's private
 //     file system; same browser API as a real drive), resume the latest session, a second
 //     laptop on the same folder, switch preset, sign out, sign in again
-//  B) no login (static hosting): presets in the browser + the demo
+//  B) no account (no storage, or static hosting): open the drive, presets saved on it, a
+//     second laptop sees them; the demo
 // Writes screenshots to docs/.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -128,13 +129,41 @@ await page.click('#lg-go');
 await page.waitForSelector('#pr-list');
 assert.equal((await page.$$('.cx-preset[data-id]')).length, 2, 'signed back in to the same presets');
 
-// ---------------- B) static hosting: no login ----------------
+// ---------------- B) no account: presets on the drive ----------------
 server.close();
 const staticServer = await serve(0, { api: false });
 const surl = `http://localhost:${staticServer.address().port}/`;
 await page.goto(surl);
+// (a new address has its own private file system: put a session on this "drive" too)
+await writeFile('/E--code-app/s1.jsonl', session('s1', 'continued on the personal laptop', 2_000_000, 'p1'));
+await page.reload();
+await page.waitForSelector('#dr-open');
+await shot('web-00-open-drive');
+await page.click('#dr-open');
 await page.waitForSelector('#pr-list');
-assert.match(await page.textContent('#portal'), /Saved in this browser/);
+assert.match(await page.textContent('#portal'), /Saved on your drive \(claude-sessions\)/);
+await page.click('#pr-new');
+await page.fill('#pe-name', 'WORK LAPTOP');
+await page.fill('#pe-laptop', 'WORK');
+await page.click('#pe-form button[type=submit]');
+await page.waitForSelector('.cx-preset[data-id]');
+const onDrive = await page.evaluate(async () => {
+  const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('claude-sessions');
+  return (await (await (await d.getDirectoryHandle('.engram')).getFileHandle('presets.json')).getFile()).text();
+});
+assert.match(onDrive, /WORK LAPTOP/, 'preset written to <drive>/claude-sessions/.engram/presets.json');
+// The other laptop: nothing in its browser, same drive.
+await page.evaluate(() => { localStorage.clear(); indexedDB.deleteDatabase('engram-web'); });
+await page.reload();
+await page.click('#dr-open');
+await page.waitForSelector('.cx-preset[data-id]');
+assert.equal((await page.$$('.cx-preset[data-id]')).length, 1, 'presets come from the drive');
+await page.click('.cx-preset[data-id] [data-act="start"]');
+await page.waitForSelector('#rp-resume', { timeout: 20000 });
+assert.match(await page.textContent('#rp-events'), /continued on the personal laptop/);
+
+await page.goto(surl);
+await page.waitForSelector('#dr-open');
 await page.click('#pr-demo');
 await page.waitForSelector('#boot.done', { state: 'attached', timeout: 20000 });
 await wait(1500);

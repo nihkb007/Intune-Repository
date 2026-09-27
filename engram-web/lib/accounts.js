@@ -31,8 +31,9 @@ async function loadAuth(env = process.env, store = createStore(env)) {
     users, secret, store, storeError,
     enabled: users.size > 0 && ok,
     misconfigured: users.size > 0 && !ok,
-    // First run: nobody can sign in yet, so the site offers to make the account.
-    setupOpen: users.size === 0 && !storeError,
+    // First run with storage connected: nobody can sign in yet, so the site offers to make
+    // the account. Without storage there's no account: presets live on the drive.
+    setupOpen: users.size === 0 && store.kind !== 'none' && !storeError,
     hasSetupCode: normCode(env.ENGRAM_SETUP_CODE).length >= 8,
   };
 }

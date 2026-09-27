@@ -40,7 +40,7 @@ function shell(inner) {
     <div class="cx-logo glitch" data-text="ENGRAM">ENGRAM</div>
     <div class="cx-sub">CLAUDE COMMAND CENTER · PORTAL</div>
     ${inner}
-    <p class="cx-foot">Your Claude sessions stay on your drive and are read only by this browser tab. The portal stores your account and presets. · <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
+    <p class="cx-foot">Your Claude sessions stay on your drive, are read only by this browser tab, and are never uploaded. · <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
   </div>`;
   document.body.appendChild(box);
   return box;
@@ -78,14 +78,14 @@ function renderSetup(me) {
   const done = (ok) => `<span class="cx-state ${ok ? 'ok' : ''}">${ok ? 'DONE' : 'TO DO'}</span>`;
   const link = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
   const box = shell(`
-    <p class="cx-lead">Welcome. This site is yours but has no account yet. Three steps, about five minutes, only once.</p>
+    <p class="cx-lead">Storage is connected, so this site can keep an account. Make it once; after that everyone signs in.</p>
     ${me.storeError ? `<div class="cx-warn">Storage is connected but not answering: ${esc(me.storeError)}</div>` : ''}
     <div class="cx-step"><div class="cx-n">1</div><div>
-      <h3>CONNECT STORAGE ${done(s.storage)}</h3>
-      <p>Your account and presets are saved in a small free database attached to the site.</p>
+      <h3>CONNECT STORAGE ${done(true)}</h3>
+      <p>Your account and presets are saved in the database attached to the site.</p>
       <ol class="cx-list">
         <li>${link(V_STORAGE, 'Open Storage in Vercel')}. If it asks, pick your team and the <b>engram</b> project.</li>
-        <li>Click <b>Create Database</b>, choose <b>Upstash for Redis</b>, pick the <b>Free</b> plan, and click <b>Create</b>.</li>
+        <li>Click <b>Create Database</b>, choose <b>Upstash for Redis</b>, pick a plan, and click <b>Create</b>.</li>
         <li>When it asks where to connect it, keep the <b>engram</b> project and all environments ticked, then click <b>Connect</b>.</li>
         <li>${link(V_DEPLOYS, 'Open Deployments')}, click <b>⋯</b> on the top one, then <b>Redeploy</b>. Wait until it says Ready (about a minute).</li>
       </ol>
@@ -110,13 +110,13 @@ function renderSetup(me) {
         <label class="cx-field"><span>PASSWORD AGAIN</span><input id="su-pass2" type="password" autocomplete="new-password" required minlength="12" /></label>
         <label class="cx-field"><span>SETUP CODE (FROM STEP 2)</span><input id="su-code" autocomplete="off" required /></label>
       </div>
-      <button class="btn" type="submit" id="su-go" ${s.storage && s.code ? '' : 'disabled'}>CREATE ACCOUNT</button>
-      ${s.storage && s.code ? '' : '<p class="muted" style="margin-top:8px">Finish steps 1 and 2 first.</p>'}
+      <button class="btn" type="submit" id="su-go" ${s.code ? '' : 'disabled'}>CREATE ACCOUNT</button>
+      ${s.code ? '' : '<p class="muted" style="margin-top:8px">Finish step 2 first.</p>'}
       <p class="cx-err" id="su-err" style="text-align:left"></p>
     </div></form>
-    <p style="text-align:center"><button class="btn ghost small" id="su-skip">USE WITHOUT AN ACCOUNT FOR NOW</button><br><small class="muted">Presets are then saved only in this browser.</small></p>`);
+    <p style="text-align:center"><button class="btn ghost small" id="su-skip">USE WITHOUT AN ACCOUNT FOR NOW</button><br><small class="muted">Presets are then saved on your drive.</small></p>`);
   $('#su-check', box).onclick = () => main();
-  $('#su-skip', box).onclick = () => renderPresets({ me: { ...me, setup: null }, presets: new Presets('local') });
+  $('#su-skip', box).onclick = () => renderDrive({ ...me, setup: null });
   $('#su-form', box).onsubmit = async (e) => {
     e.preventDefault();
     const err = $('#su-err', box);
@@ -131,7 +131,7 @@ function renderSetup(me) {
 
 async function renderPresets(ctx) {
   const list = await ctx.presets.load();
-  const where = ctx.presets.mode === 'server' ? 'Saved to your account: both laptops see them.' : ctx.me?.auth ? 'Saved in this browser (no server storage connected yet).' : 'Saved in this browser.';
+  const where = ctx.presets.mode === 'drive' ? `Saved on your drive (${esc(ctx.dirName)}): both laptops see them.` : ctx.presets.mode === 'server' ? 'Saved to your account: both laptops see them.' : ctx.me?.auth ? 'Saved in this browser (no server storage connected yet).' : 'Saved in this browser.';
   const box = shell(`
     <div class="cx-bar">${ctx.me?.user ? `<span>Signed in as <b>${esc(ctx.me.user)}</b></span><button class="btn ghost small" id="pr-out">SIGN OUT</button>` : '<span></span>'}</div>
     ${ctx.me?.misconfigured ? '<div class="cx-warn">Login is half set up: ENGRAM_SESSION_SECRET is missing or shorter than 32 characters.</div>' : ''}
@@ -241,7 +241,7 @@ async function folderFor(preset) {
 }
 
 async function start(ctx, preset, { demo } = {}) {
-  const dir = demo ? null : await folderFor(preset);
+  const dir = demo ? null : ctx.dir || await folderFor(preset);
   $('#portal .cx')?.insertAdjacentHTML('beforeend', '<p class="cx-foot" id="cx-loading">Reading sessions…</p>');
   if (demo) engine.connectDemo(demo, { laptopName: preset.laptop });
   else await engine.connect(dir, { laptopName: preset.laptop });
@@ -269,13 +269,69 @@ async function whoAmI() {
   } catch { return null; }
 }
 
+// No account: open the sessions folder on the drive first; presets are stored there.
+const DRIVE_KEY = 'folder:drive';
+async function renderDrive(me) {
+  const saved = await idbGet(DRIVE_KEY);
+  const box = shell(`
+    ${supported ? '' : '<div class="cx-warn">This browser can’t open folders. Use <b>Microsoft Edge</b> or <b>Google Chrome</b>. You can still try the demo.</div>'}
+    <div class="cx-card">
+      <h3>HOW IT WORKS</h3>
+      <ol class="cx-list">
+        <li><b>Once per laptop:</b> run the one-time setup command below. It moves that laptop's Claude Code sessions onto the drive.</li>
+        <li><b>Open your drive</b> with the button below. The browser asks for permission once and then remembers it.</li>
+        <li><b>Make a preset</b> for each laptop (e.g. WORK, PERSONAL). Presets are saved on the drive, so both laptops see them.</li>
+        <li><b>Start a preset</b> and press <b>COPY RESUME COMMAND</b> to continue your latest session in a terminal.</li>
+      </ol>
+    </div>
+    <div class="cx-card" style="text-align:center">
+      <h3>OPEN YOUR DRIVE</h3>
+      <p class="muted">${saved ? `Last time: <b class="mono">${esc(saved.name)}</b>. Click to open it again.` : 'Choose your external drive (or its <span class="mono">claude-sessions</span> folder). This browser remembers it.'}</p>
+      <button class="btn" id="dr-open" ${supported || window.__engramPickFolder ? '' : 'disabled'}>${saved ? `OPEN ${esc(saved.name).toUpperCase()}` : 'CHOOSE THE DRIVE'}</button>
+      ${saved ? '<p><button class="btn ghost small" id="dr-other">CHOOSE ANOTHER FOLDER</button></p>' : ''}
+      <p class="cx-err" id="dr-err"></p>
+    </div>
+    <details class="cx-card cx-setup"><summary>FIRST TIME ON THIS LAPTOP? ONE-TIME SETUP</summary>
+      <p>Close Claude Code, open <b>PowerShell</b>, paste this, press Enter. It moves this laptop's Claude sessions to the drive and links Claude Code to them. Running it again is safe. Give the drive the same letter on both laptops.</p>
+      <label class="cx-row">Drive letter <input id="pr-letter" maxlength="1" value="E" /></label>
+      <pre id="pr-script"></pre>
+      <button class="btn ghost small" id="pr-copy">COPY SETUP COMMAND</button>
+    </details>
+    <p style="text-align:center;margin-top:14px"><button class="btn ghost small" id="pr-demo">TRY THE DEMO</button></p>`);
+  const err = (t) => { $('#dr-err', box).textContent = t || ''; };
+  const draw = () => { const l = ($('#pr-letter', box).value.replace(/[^A-Za-z]/g, '') || 'E').toUpperCase(); $('#pr-script', box).textContent = setupScript(`${l}:\\claude-sessions`); };
+  $('#pr-letter', box).oninput = draw;
+  draw();
+  $('#pr-copy', box).onclick = async () => { await navigator.clipboard.writeText($('#pr-script', box).textContent); $('#pr-copy', box).textContent = 'COPIED: PASTE IT INTO POWERSHELL'; };
+  $('#pr-demo', box).onclick = async () => {
+    try { await start({ me }, { ...blankPreset(0), name: 'Demo', laptop: 'DEMO LAPTOP', view: 'nexus' }, { demo: await (await fetch('demo-pack.json')).json() }); } catch { err('The demo needs the site to be opened over http(s).'); }
+  };
+  const open = async (reuse) => {
+    err('');
+    try {
+      let dir = null;
+      if (reuse && saved && ((await saved.queryPermission({ mode: 'readwrite' })) === 'granted' || (await saved.requestPermission({ mode: 'readwrite' })) === 'granted')) dir = saved;
+      if (!dir) {
+        dir = window.__engramPickFolder ? await window.__engramPickFolder() // end-to-end tests
+          : await resolveSessionsFolder(await window.showDirectoryPicker({ id: 'engram-drive', mode: 'readwrite' }));
+        await idbSet(DRIVE_KEY, dir);
+      }
+      const presets = new Presets('drive', dir);
+      return renderPresets({ me, presets, dir, dirName: dir.name });
+    } catch (e) { if (e.name !== 'AbortError') err(e.message); }
+  };
+  $('#dr-open', box).onclick = () => open(true);
+  const other = $('#dr-other', box);
+  if (other) other.onclick = () => open(false);
+}
+
 async function main() {
   document.body.classList.add('connecting');
   const me = await whoAmI();
   if (me?.auth && !me.user) return renderLogin();
   if (me?.setup) return renderSetup(me);
-  const presets = new Presets(me?.auth && me.user && me.store && me.store !== 'none' ? 'server' : 'local');
-  return renderPresets({ me, presets });
+  if (me?.auth && me.user && me.store && me.store !== 'none') return renderPresets({ me, presets: new Presets('server') });
+  return renderDrive(me);
 }
 
 main();

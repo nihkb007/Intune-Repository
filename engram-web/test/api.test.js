@@ -24,7 +24,7 @@ const resetMemory = () => require('../lib/store')._memory.clear();
 
 test('without login configured the portal runs open and keeps presets in the browser', async () => {
   withEnv({});
-  assert.deepEqual((await call('me')).json, { auth: false, misconfigured: false, store: 'none', setup: { storage: false, code: false } });
+  assert.deepEqual((await call('me')).json, { auth: false, misconfigured: false, store: 'none', setup: null }, 'no storage: no account, presets on the drive');
   assert.equal((await call('presets')).status, 403);
   withEnv({ ENGRAM_USERS: users, ENGRAM_SESSION_SECRET: 'short' });
   assert.equal((await call('me')).json.misconfigured, true, 'short secret is reported, not silently accepted');
@@ -54,10 +54,10 @@ test('first run: the account is made on the site with the setup code, once', asy
   withEnv({ ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
   assert.equal((await make(good)).status, 503, 'needs storage');
   withEnv({ ENGRAM_STORE: 'memory' });
-  assert.deepEqual((await call('me')).json.setup, { storage: true, code: false });
+  assert.deepEqual((await call('me')).json.setup, { code: false });
   assert.equal((await make(good)).status, 503, 'needs a setup code');
   withEnv({ ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'ABCD-EFGH-2345-WXYZ' });
-  assert.deepEqual((await call('me')).json.setup, { storage: true, code: true });
+  assert.deepEqual((await call('me')).json.setup, { code: true });
   assert.equal((await call('setup', { method: 'POST', body: good, ip: '3.3.3.1' })).status, 403, 'cross-site posts refused');
   assert.equal((await make({ ...good, code: 'WRONG-CODE-0000' })).status, 403);
   assert.equal((await make({ ...good, password: 'short' })).status, 400);
