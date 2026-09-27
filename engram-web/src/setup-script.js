@@ -24,8 +24,14 @@ function setupScript(target, { claudeDir = null } = {}) {
     'if ($item -and $item.LinkType) { Write-Host "Already set up: $p -> $($item.Target)" -ForegroundColor Green }',
     'else {',
     '  if ($item) {',
-    '    robocopy $p $drive /E /XO /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null',
-    '    if ($LASTEXITCODE -ge 8) { Write-Host "Copy failed (robocopy $LASTEXITCODE). Close Claude Code and try again." -ForegroundColor Red; return }',
+    // /COPY:DT /FFT: data + times only, 2-second time tolerance, so exFAT/FAT32 drives work
+    '    $out = robocopy $p $drive /E /XO /XJ /FFT /COPY:DT /R:2 /W:2 /NFL /NDL /NJH /NJS /NP',
+    '    if ($LASTEXITCODE -ge 8) {',
+    '      Write-Host "Some files could not be copied (robocopy $LASTEXITCODE). Nothing was changed on this laptop." -ForegroundColor Red',
+    '      $out | Select-String "ERROR" -Context 0,1 | Select-Object -First 4 | ForEach-Object { Write-Host $_.Line.Trim() -ForegroundColor Yellow; if ($_.Context.PostContext) { Write-Host ("  " + $_.Context.PostContext[0].Trim()) } }',
+    '      Write-Host "Usually a Claude app still has a file open: close Claude Code, VS Code and the Claude desktop app (or run: Stop-Process -Name claude -Force), then run this again."',
+    '      return',
+    '    }',
     '    $backup = "$p.before-engram-$(Get-Date -Format yyyyMMdd-HHmmss)"',
     '    try { Rename-Item -LiteralPath $p -NewName (Split-Path $backup -Leaf) -ErrorAction Stop } catch { Write-Host "Claude Code seems to be running. Close it and try again." -ForegroundColor Red; return }',
     '  }',
@@ -50,7 +56,7 @@ function undoScript(target, { claudeDir = null } = {}) {
     'if (-not ($item -and $item.LinkType)) { Write-Host "Not linked to the drive; nothing to undo." ; return }',
     '[System.IO.Directory]::Delete($p)  # removes only the link, never the drive folder',
     'New-Item -ItemType Directory -Path $p | Out-Null',
-    'if (Test-Path $drive) { robocopy $drive $p /E /XO /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null }',
+    'if (Test-Path $drive) { robocopy $drive $p /E /XO /XJ /FFT /COPY:DT /R:2 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null }',
     'Write-Host "Done: this laptop has a normal sessions folder again (with copies from the drive)." -ForegroundColor Green',
     '}'].join('\n');
 }

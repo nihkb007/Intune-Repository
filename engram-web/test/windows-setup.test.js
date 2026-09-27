@@ -49,6 +49,25 @@ for (const sh of shells) {
   });
 }
 
+for (const sh of shells) {
+  test(`a session file held open by another app stops setup safely and is named (${sh})`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-ps-lock-'));
+    const claude = path.join(root, 'laptop', '.claude');
+    const drive = path.join(root, 'drive', 'claude-sessions');
+    const locked = path.join(claude, 'projects', 'E--code-app', 'busy.jsonl');
+    fs.mkdirSync(path.dirname(locked), { recursive: true });
+    fs.writeFileSync(locked, '{"a":1}\n');
+    // Hold the file open with no sharing (like a running Claude app) while setup runs.
+    const script = `$h = [System.IO.File]::Open('${locked.replace(/'/g, "''")}', 'Open', 'ReadWrite', 'None')\n${setupScript(drive, { claudeDir: claude })}\n$h.Close()`;
+    const out = run(sh, script);
+    assert.match(out, /Some files could not be copied/);
+    assert.match(out, /busy\.jsonl/, 'the blocked file is named');
+    assert.match(out, /close Claude Code/);
+    assert.ok(!fs.lstatSync(path.join(claude, 'projects')).isSymbolicLink(), 'nothing changed on the laptop');
+    assert.match(run(sh, setupScript(drive, { claudeDir: claude })), /Done: Claude Code sessions now live on/, 'works once the file is closed');
+  });
+}
+
 test('windows setup test ran or was skipped off Windows', () => {
   assert.ok(process.platform !== 'win32' || shells.length > 0, 'expected PowerShell on Windows');
 });
