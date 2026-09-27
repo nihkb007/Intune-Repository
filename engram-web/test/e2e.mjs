@@ -24,10 +24,14 @@ const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbo
 const errors = [];
 const context = await browser.newContext({ viewport: { width: 1480, height: 920 } });
 await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: url });
-const page = await context.newPage();
-page.on('pageerror', (e) => errors.push(e.message));
-page.on('console', (m) => { if (m.type() === 'error' && !/401|Failed to load resource/.test(m.text())) errors.push(m.text()); });
-page.on('dialog', (d) => d.accept());
+const watch = (p) => {
+  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('console', (m) => { if (m.type() === 'error' && !/401|Failed to load resource/.test(m.text())) errors.push(m.text()); });
+  p.on('dialog', (d) => d.accept());
+  p.on('crash', () => errors.push('page crashed'));
+  return p;
+};
+let page = watch(await context.newPage());
 const shot = async (n) => { await page.screenshot({ path: path.join(shots, `${n}.png`) }); console.log('  ✓', n); };
 const nav = async (v) => { await page.click(`#rail a[data-view="${v}"]`); await wait(1200); };
 
@@ -162,6 +166,10 @@ await page.click('.cx-preset[data-id] [data-act="start"]');
 await page.waitForSelector('#rp-resume', { timeout: 20000 });
 assert.match(await page.textContent('#rp-events'), /continued on the personal laptop/);
 
+// Demo in a fresh tab, after ENGRAM's delayed save to the folder has finished.
+await wait(1500);
+await page.close();
+page = watch(await context.newPage());
 await page.goto(surl);
 await page.waitForSelector('#dr-open');
 await page.click('#pr-demo');
