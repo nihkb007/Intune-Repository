@@ -53,7 +53,7 @@ function shell(inner) {
     <div class="cx-logo glitch" data-text="ENGRAM">ENGRAM</div>
     <div class="cx-sub">CLAUDE COMMAND CENTER · PORTAL</div>
     ${inner}
-    <p class="cx-foot">Your Claude sessions stay on your drive, are read only by this browser tab, and are never uploaded. · <a href="https://butchermedia.cc" target="_blank" rel="noopener">butchermedia.cc</a></p>
+    <p class="cx-foot">Your Claude sessions stay on your drive, are read only by this browser tab, and are never uploaded.</p>
   </div>`;
   document.body.appendChild(box);
   return box;
@@ -288,28 +288,31 @@ async function renderDrive(me) {
   const saved = await idbGet(DRIVE_KEY);
   const box = shell(`
     ${supported ? '' : '<div class="cx-warn">This browser can’t open folders. Use <b>Microsoft Edge</b> or <b>Google Chrome</b>. You can still try the demo.</div>'}
-    <div class="cx-card">
-      <h3>HOW IT WORKS</h3>
+    <p class="cx-lead">Work on the same Claude Code sessions from both laptops. Your sessions live on your external drive; this page just reads them.</p>
+    <div class="cx-step"><div class="cx-n">1</div><div>
+      <h3>SET UP THIS LAPTOP (ONCE PER LAPTOP)</h3>
       <ol class="cx-list">
-        <li><b>Once per laptop:</b> run the one-time setup command below. It moves that laptop's Claude Code sessions onto the drive.</li>
-        <li><b>Open your drive</b> with the button below. The browser asks for permission once and then remembers it.</li>
-        <li><b>Make a preset</b> for each laptop (e.g. WORK, PERSONAL). Presets are saved on the drive, so both laptops see them.</li>
-        <li><b>Start a preset</b> and press <b>COPY RESUME COMMAND</b> to continue your latest session in a terminal.</li>
+        <li>Plug in your external drive and check its letter in File Explorer. Use the <b>same letter on both laptops</b>.</li>
+        <li>Close Claude Code if it's running.</li>
+        <li>Open <b>PowerShell</b>: press the Windows key, type <b>PowerShell</b>, press Enter.</li>
+        <li>Click <b>COPY SETUP COMMAND</b>, paste it into PowerShell (right-click), and press Enter.</li>
+        <li>It prints <b>Done</b> (or <b>Already set up</b>). This laptop's Claude Code sessions now live on the drive. Running it again is harmless.</li>
       </ol>
-    </div>
-    <div class="cx-card" style="text-align:center">
-      <h3>OPEN YOUR DRIVE</h3>
-      <p class="muted">${saved ? `Last time: <b class="mono">${esc(saved.name)}</b>. Click to open it again.` : 'Choose your external drive (or its <span class="mono">claude-sessions</span> folder). This browser remembers it.'}</p>
-      <button class="btn" id="dr-open" ${supported || window.__engramPickFolder ? '' : 'disabled'}>${saved ? `OPEN ${esc(saved.name).toUpperCase()}` : 'CHOOSE THE DRIVE'}</button>
-      ${saved ? '<p><button class="btn ghost small" id="dr-other">CHOOSE ANOTHER FOLDER</button></p>' : ''}
-      <p class="cx-err" id="dr-err"></p>
-    </div>
-    <details class="cx-card cx-setup"><summary>FIRST TIME ON THIS LAPTOP? ONE-TIME SETUP</summary>
-      <p>Close Claude Code, open <b>PowerShell</b>, paste this, press Enter. It moves this laptop's Claude sessions to the drive and links Claude Code to them. Running it again is safe. Give the drive the same letter on both laptops.</p>
       <label class="cx-row">Drive letter <input id="pr-letter" maxlength="1" value="E" /></label>
-      <pre id="pr-script"></pre>
-      <button class="btn ghost small" id="pr-copy">COPY SETUP COMMAND</button>
-    </details>
+      <button class="btn" id="pr-copy">COPY SETUP COMMAND</button>
+      <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">Show the command</summary><pre id="pr-script"></pre></details>
+    </div></div>
+    <div class="cx-step"><div class="cx-n">2</div><div>
+      <h3>OPEN YOUR DRIVE HERE</h3>
+      <p>${saved ? `Last time: <b class="mono">${esc(saved.name)}</b>.` : 'Choose your drive (or its <span class="mono">claude-sessions</span> folder). Click <b>Allow</b> when the browser asks. It remembers this.'}</p>
+      <button class="btn" id="dr-open" ${supported || window.__engramPickFolder ? '' : 'disabled'}>${saved ? `OPEN ${esc(saved.name).toUpperCase()}` : 'CHOOSE THE DRIVE'}</button>
+      ${saved ? '<button class="btn ghost small" id="dr-other">CHOOSE ANOTHER FOLDER</button>' : ''}
+      <p class="cx-err" id="dr-err" style="text-align:left"></p>
+    </div></div>
+    <div class="cx-step"><div class="cx-n">3</div><div>
+      <h3>WORK ON EITHER LAPTOP</h3>
+      <p>In a terminal: <span class="mono">cd E:\\your-project</span> then <span class="mono">claude --continue</span>. It picks up the last conversation, even one from the other laptop. This page shows costs and past sessions, and copies the command to resume any of them.</p>
+    </div></div>
     <p style="text-align:center;margin-top:14px"><button class="btn ghost small" id="pr-demo">TRY THE DEMO</button></p>`);
   const err = (t) => { $('#dr-err', box).textContent = t || ''; };
   const draw = () => { const l = ($('#pr-letter', box).value.replace(/[^A-Za-z]/g, '') || 'E').toUpperCase(); $('#pr-script', box).textContent = setupScript(`${l}:\\claude-sessions`); };

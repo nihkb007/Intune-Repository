@@ -63,3 +63,5 @@ body.connecting #titlebar, body.connecting #rail, body.connecting #view, body.co
 .cx-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 @media (max-width: 640px) { .cx-form { grid-template-columns: minmax(0, 1fr); } }
 form.cx-step { margin-top: 0; }
+/* The desktop app's credit link isn't shown on the website. */
+body.web .credit, body.web .credit-line { display: none; }
