@@ -324,9 +324,9 @@ async function renderDrive(me) {
     try {
       let dir = null;
       if (reuse && saved && ((await saved.queryPermission({ mode: 'readwrite' })) === 'granted' || (await saved.requestPermission({ mode: 'readwrite' })) === 'granted')) dir = saved;
+      if (!dir && window.__engramPickFolder) dir = await window.__engramPickFolder(); // end-to-end tests (not remembered, like folderFor)
       if (!dir) {
-        dir = window.__engramPickFolder ? await window.__engramPickFolder() // end-to-end tests
-          : await resolveSessionsFolder(await window.showDirectoryPicker({ id: 'engram-drive', mode: 'readwrite' }));
+        dir = await resolveSessionsFolder(await window.showDirectoryPicker({ id: 'engram-drive', mode: 'readwrite' }));
         await idbSet(DRIVE_KEY, dir);
       }
       const presets = new Presets('drive', dir);
