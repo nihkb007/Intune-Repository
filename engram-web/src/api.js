@@ -3,6 +3,7 @@
 // folders it was not given) become "copy the command" or a clear message.
 import { fuse, injectManagedBlock } from '../../engram/src/core/fusion.js';
 import * as sync from '../../engram/src/core/sync.js';
+import { resumeScript } from './setup-script.js';
 
 const ok = (data) => ({ ok: true, data });
 const fail = (err) => ({ ok: false, error: err?.message || String(err) });
@@ -12,6 +13,7 @@ const notInBrowser = (what) => wrap(() => { throw new Error(`${what} is only ava
 function psQuote(s) { return `'${String(s).replace(/'/g, "''")}'`; }
 
 export function launchCommand({ projectPath, resumeId } = {}) {
+  if (resumeId) return resumeScript({ id: resumeId, projectPath }); // works from any folder, on any laptop
   const parts = [];
   if (projectPath) parts.push(`Set-Location -LiteralPath ${psQuote(projectPath)}`);
   parts.push(`claude${resumeId ? ` --resume ${resumeId}` : ' --continue'}`);

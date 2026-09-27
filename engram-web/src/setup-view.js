@@ -22,7 +22,7 @@ export async function openLatestSession() {
   const s = state.model?.sessions?.[0];
   if (!s) { toast('No sessions in this folder yet.', 'NOTHING TO RESUME', 'var(--yellow)'); return; }
   go('replay', { id: s.id, label: s.title, atEnd: true });
-  toast('Press COPY RESUME COMMAND, then paste it into a terminal.', 'LATEST SESSION', 'var(--green)');
+  toast('Press COPY RESUME COMMAND, then paste it into PowerShell on this laptop. It works from any folder.', 'LATEST SESSION', 'var(--green)');
 }
 
 function portalPanel() {

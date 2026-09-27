@@ -110,7 +110,10 @@ assert.match(await page.textContent('#rp-resume'), /COPY RESUME COMMAND/);
 assert.ok((await page.textContent('#rp-events')).includes('first task on the work laptop'), 'whole conversation shown');
 await page.click('#rp-resume');
 await wait(300);
-assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^Set-Location -LiteralPath 'E:\\code\\app'; claude --resume s1$/);
+const resumeCmd = await page.evaluate(() => navigator.clipboard.readText());
+assert.match(resumeCmd, /^& \{\n\$id = 's1'\n/, 'one pasteable block');
+assert.match(resumeCmd, /Set-Location -LiteralPath 'E:\\code\\app'/);
+assert.match(resumeCmd, /claude --resume \$id\n\}$/);
 await shot('web-04-resume');
 
 // Presets live on the server: a "second laptop" (fresh browser identity) sees them after sign-in.

@@ -68,4 +68,30 @@ function undoScript(target, { claudeDir = null } = {}) {
     '}'].join('\n');
 }
 
-module.exports = { setupScript, undoScript, psQuote };
+/**
+ * Resume one conversation on this laptop, whatever the project's folder is called here.
+ * Claude Code only lists a conversation under the folder it was started in, so this finds the
+ * newest copy of the conversation (this laptop's Claude folder, or <any drive>\claude-sessions),
+ * puts it under the folder the terminal is in (or the original project folder when it exists
+ * here), and opens it. The newest copy always wins, so going back and forth between laptops and
+ * folders keeps the whole conversation.
+ */
+function resumeScript({ id, projectPath = null } = {}) {
+  if (!/^[A-Za-z0-9-]+$/.test(String(id || ''))) throw new Error('bad session id');
+  return ['& {',
+    `$id = ${psQuote(id)}`,
+    projectPath ? `if (Test-Path -LiteralPath ${psQuote(projectPath)}) { Set-Location -LiteralPath ${psQuote(projectPath)} }` : null,
+    '$mine = Join-Path $env:USERPROFILE ".claude\\projects"',
+    '$roots = @($mine) + (Get-PSDrive -PSProvider FileSystem | ForEach-Object { Join-Path $_.Root "claude-sessions" }) | Where-Object { Test-Path -LiteralPath $_ }',
+    '$src = $roots | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter "$id.jsonl" -Recurse -Depth 1 -File -ErrorAction SilentlyContinue } | Sort-Object LastWriteTime -Descending | Select-Object -First 1',
+    'if (-not $src) { Write-Host "Could not find this conversation. Plug in the drive and try again." -ForegroundColor Red; return }',
+    '$dst = Join-Path $mine ((Get-Location).Path -replace "[^A-Za-z0-9]", "-")',
+    'New-Item -ItemType Directory -Force -Path $dst | Out-Null',
+    '$to = Join-Path $dst "$id.jsonl"',
+    'if ($src.FullName -ne $to -and (-not (Test-Path -LiteralPath $to) -or (Get-Item -LiteralPath $to).LastWriteTime -lt $src.LastWriteTime)) { Copy-Item -LiteralPath $src.FullName -Destination $to -Force }',
+    'Write-Host "Resuming in $((Get-Location).Path)" -ForegroundColor Green',
+    'claude --resume $id',
+    '}'].filter(Boolean).join('\n');
+}
+
+module.exports = { setupScript, undoScript, resumeScript, psQuote };

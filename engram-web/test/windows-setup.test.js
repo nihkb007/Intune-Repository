@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { setupScript, undoScript } = require('../src/setup-script.js');
+const { setupScript, undoScript, resumeScript } = require('../src/setup-script.js');
 
 const shells = process.platform === 'win32'
   ? ['powershell.exe', 'pwsh.exe'].filter((sh) => { try { execFileSync(sh, ['-NoProfile', '-Command', '1'], { stdio: 'ignore' }); return true; } catch { return false; } })
@@ -79,6 +79,36 @@ for (const sh of shells) {
     const out = run(sh, `${fake}\n${setupScript(path.join(root, 'drive', 'claude-sessions'), { claudeDir: claude })}`);
     assert.match(out, /Not enough space on [A-Z]: 0\.0 GB needed, 0\.0 GB free/);
     assert.ok(!fs.lstatSync(path.join(claude, 'projects')).isSymbolicLink(), 'nothing changed');
+  });
+}
+
+for (const sh of shells) {
+  test(`resume finds the newest copy of a conversation and opens it from any folder (${sh})`, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-ps-resume-'));
+    const home = path.join(root, 'home');
+    const mine = path.join(home, '.claude', 'projects');
+    // The conversation was started in C:\\Claude-Projects\\ServiceNow on the other laptop...
+    fs.mkdirSync(path.join(mine, 'C--Claude-Projects-ServiceNow'), { recursive: true });
+    fs.writeFileSync(path.join(mine, 'C--Claude-Projects-ServiceNow', 'abc-123.jsonl'), 'old\n');
+    // ...and this laptop has the project somewhere else.
+    const here = path.join(root, 'work', 'ServiceNow');
+    fs.mkdirSync(here, { recursive: true });
+    const fakeClaude = 'function claude { Write-Output ("CLAUDE " + ($args -join " ") + " IN " + (Get-Location).Path) }';
+    const script = `$env:USERPROFILE = '${home.replace(/'/g, "''")}'\nSet-Location -LiteralPath '${here.replace(/'/g, "''")}'\n${fakeClaude}\n${resumeScript({ id: 'abc-123', projectPath: 'Q:\\\\not\\\\on\\\\this\\\\laptop' })}`;
+    const out = run(sh, script);
+    assert.match(out, /CLAUDE --resume abc-123 IN /);
+    const slug = fs.realpathSync.native(here).replace(/[^A-Za-z0-9]/g, '-');
+    const slugs = fs.readdirSync(mine);
+    const copied = slugs.find((d) => d.toLowerCase() === slug.toLowerCase()) || slugs.find((d) => d.endsWith('-work-ServiceNow'));
+    assert.ok(copied, `copied under this folder's name (${slugs.join(', ')})`);
+    assert.equal(fs.readFileSync(path.join(mine, copied, 'abc-123.jsonl'), 'utf8'), 'old\n');
+
+    // Continued somewhere else later: the newer copy wins next time here.
+    fs.writeFileSync(path.join(mine, 'C--Claude-Projects-ServiceNow', 'abc-123.jsonl'), 'newer\n');
+    const later = new Date(Date.now() + 60000);
+    fs.utimesSync(path.join(mine, 'C--Claude-Projects-ServiceNow', 'abc-123.jsonl'), later, later);
+    run(sh, script);
+    assert.equal(fs.readFileSync(path.join(mine, copied, 'abc-123.jsonl'), 'utf8'), 'newer\n');
   });
 }
 
