@@ -12,13 +12,26 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const post = (url, body) => fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Engram': '1' }, body: JSON.stringify(body || {}) });
 
 // ---- folder permissions remembered per preset (IndexedDB can store folder handles) --------
+// One connection, closed when the database is deleted elsewhere ("open another folder" in
+// another tab, or a tab kept in the back/forward cache), so a delete never blocks and a new
+// open never waits behind it. Gives up after 3 s: the drive can always be chosen again.
+let idbConn = null;
 function idb() {
-  return new Promise((resolve, reject) => {
+  if (idbConn) return idbConn;
+  idbConn = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { idbConn = null; reject(new Error('browser storage busy')); }, 3000);
     const r = indexedDB.open('engram-web', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('kv');
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
+    r.onsuccess = () => {
+      clearTimeout(timer);
+      const db = r.result;
+      db.onversionchange = () => { db.close(); idbConn = null; };
+      resolve(db);
+    };
+    r.onerror = () => { clearTimeout(timer); idbConn = null; reject(r.error); };
+    r.onblocked = () => { clearTimeout(timer); idbConn = null; reject(new Error('browser storage busy')); };
   });
+  return idbConn;
 }
 const idbGet = async (k) => { try { const db = await idb(); return await new Promise((res) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); } catch { return null; } };
 const idbSet = async (k, v) => { try { const db = await idb(); await new Promise((res) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = res; }); } catch { /* storage blocked */ } };

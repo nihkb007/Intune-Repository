@@ -20,7 +20,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 Object.assign(process.env, { ENGRAM_ACCOUNT: 'on', ENGRAM_STORE: 'memory', ENGRAM_SETUP_CODE: 'E2E1-SETU-PCOD-E234' });
 const server = await serve(0);
 const url = `http://localhost:${server.address().port}/`;
-const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'], headless: process.env.E2E_HEADFUL !== '1' });
 const errors = [];
 const context = await browser.newContext({ viewport: { width: 1480, height: 920 } });
 await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: url });
@@ -32,6 +32,13 @@ const watch = (p) => {
   return p;
 };
 let page = watch(await context.newPage());
+// On failure, show what the page had on screen (CI has no screenshots to look at).
+process.on('uncaughtException', async (err) => {
+  console.error(err);
+  const text = await page.evaluate(() => document.body.innerText.slice(0, 600)).catch((e) => `(page unavailable: ${e.message})`);
+  console.error('--- page text ---\n' + text + '\n--- page errors ---\n' + JSON.stringify(errors));
+  process.exit(1);
+});
 const shot = async (n) => { await page.screenshot({ path: path.join(shots, `${n}.png`) }); console.log('  ✓', n); };
 const nav = async (v) => { await page.click(`#rail a[data-view="${v}"]`); await wait(1200); };
 
@@ -108,7 +115,7 @@ await shot('web-04-resume');
 
 // Presets live on the server: a "second laptop" (fresh browser identity) sees them after sign-in.
 await writeFile('/E--code-app/s1.jsonl', session('s1', 'continued on the personal laptop', 2_000_000, 'p1'), true);
-await page.evaluate(() => { localStorage.clear(); indexedDB.deleteDatabase('engram-web'); });
+await page.evaluate(() => { localStorage.clear(); return new Promise((r) => { const d = indexedDB.deleteDatabase('engram-web'); d.onsuccess = d.onerror = d.onblocked = r; }); });
 await page.goto(url);
 await page.waitForSelector('#pr-list');
 assert.equal((await page.$$('.cx-preset[data-id]')).length, 2, 'presets come from the account');
@@ -157,7 +164,7 @@ const onDrive = await page.evaluate(async () => {
 });
 assert.match(onDrive, /WORK LAPTOP/, 'preset written to <drive>/claude-sessions/.engram/presets.json');
 // The other laptop: nothing in its browser, same drive.
-await page.evaluate(() => { localStorage.clear(); indexedDB.deleteDatabase('engram-web'); });
+await page.evaluate(() => { localStorage.clear(); return new Promise((r) => { const d = indexedDB.deleteDatabase('engram-web'); d.onsuccess = d.onerror = d.onblocked = r; }); });
 await page.reload();
 await page.click('#dr-open');
 await page.waitForSelector('.cx-preset[data-id]');
